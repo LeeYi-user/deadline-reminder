@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deadline 提醒</title>
+<meta name="description" content="輸入主旨和截止時間，Google 日曆和電腦會照規則提醒你。">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-64.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
+<style>
+  :root { color-scheme: light dark; --bg: #f5f6f8; --text: #1d2330; --muted: #677083; --accent: #2563eb; --accent-text: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111418; --text: #e7e9ee; --muted: #9aa2b1; --accent: #4d8bff; --accent-text: #0b1220; }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
+  #splash { position: fixed; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; padding: 24px; background: var(--bg); text-align: center; transition: opacity .25s; }
+  #splash.gone { opacity: 0; pointer-events: none; }
+  #splash img { width: 88px; height: 88px; }
+  #splash h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  #status { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 320px; }
+  #direct { display: none; padding: 11px 20px; border-radius: 10px; background: var(--accent); color: var(--accent-text);
+    text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="splash">
+  <img src="icon-192.png" alt="">
+  <h1>Deadline 提醒</h1>
+  <p id="status">載入中…</p>
+  <a id="direct">直接開啟</a>
+</div>
+<iframe id="app" title="Deadline 提醒"></iframe>
+<script>
+  // 實際的 App 是 Google Apps Script 網頁（資料在你的 Google 日曆），這一頁只是可安裝的外框。
+  var APP_URL = 'https://script.google.com/macros/s/AKfycbwtwa-FT9e2HZ1245SuyV-ABjFjVJk8I9SGNOf7eZ9UaXwSYGwa0ritn-p4igdSSBq5gw/exec';
+  var splash = document.getElementById('splash');
+  var msg = document.getElementById('status');
+  var direct = document.getElementById('direct');
+  var ready = false;
+  direct.href = APP_URL;
+
+  // 網頁 App 載入成功時會送來 'deadline-reminder:ready'
+  window.addEventListener('message', function (e) {
+    if (e.data !== 'deadline-reminder:ready' || !/\.googleusercontent\.com$/.test(e.origin)) return;
+    ready = true;
+    splash.classList.add('gone');
+  });
+
+  function slow() {
+    if (ready) return;
+    msg.textContent = navigator.onLine
+      ? '載入太久了。可能是手機的 Chrome 沒有登入建立這個 App 的 Google 帳號，或擋了第三方 Cookie。'
+      : '沒有網路連線。連上網路後再開一次。';
+    direct.style.display = navigator.onLine ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('app').src = APP_URL;
+  setTimeout(slow, 15000);
+  window.addEventListener('online', function () { if (!ready) location.reload(); });
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>
