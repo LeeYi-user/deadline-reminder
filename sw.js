@@ -1,6 +1,6 @@
 // 只快取這個外框（頁面和圖示），讓 App 開得快、離線時也能顯示「沒有網路」。
 // 實際資料由 Google Apps Script 網頁提供，不經過這裡。
-var CACHE = 'deadline-shell-v1';
+var CACHE = 'deadline-shell-v2';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png'];
 

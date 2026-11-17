@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Deadline 提醒</title>
 <meta name="description" content="輸入主旨和截止時間，Google 日曆和電腦會照規則提醒你。">
 <link rel="manifest" href="manifest.webmanifest">
@@ -62,7 +62,7 @@
   }
 
   document.getElementById('app').src = APP_URL;
-  setTimeout(slow, 15000);
+  setTimeout(slow, 25000);
   window.addEventListener('online', function () { if (!ready) location.reload(); });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
