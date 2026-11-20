@@ -64,6 +64,8 @@
   }
 
   // ---------- 狀態 ----------
+  var KEY_THEME = 'dr.theme', KEY_DEF = 'dr.defaults';
+  var prefs = load(KEY_DEF, { ahead: DEF_AHEAD, every: DEF_EVERY });   // 新項目的預設提醒（存在這台裝置）
   var base = load(KEY_BASE, null);      // { items, done, at }
   var outbox = load(KEY_OUT, []);       // [{ opId, type, id?, tmp?, at, data? }]
   var openId = null;                    // 展開中的卡片
@@ -201,7 +203,7 @@
       save(KEY_OUT, outbox);
       if (res.state) setBase(res.state);
       render();
-      if (failed.length) toast('有 ' + failed.length + ' 項變更無法同步：' + failed[0].error);
+      if (failed.length) notice('有 ' + failed.length + ' 項變更無法同步：' + failed[0].error);
       if (outbox.length) scheduleFlush(300); else afterSync();
       updatePill();
     }, onFail);
@@ -224,13 +226,23 @@
       if (state && !outbox.length && !busy) { setBase(state); render(); }
     }, function () { maintained = false; });
   }
+  /* 上方的小提示：離線、連不上 Google，或短暫的錯誤訊息（不會擋到最下面的最新事項） */
+  var noticeText = '', noticeTimer = null;
+  function notice(text) {
+    noticeText = text;
+    updatePill();
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { noticeText = ''; updatePill(); }, 5000);
+  }
   function updatePill() {
     var p = $('pill'), text = '', link = false;
-    if (!navigator.onLine) text = outbox.length ? '離線中・' + outbox.length + ' 項變更連線後同步' : '離線中';
+    if (noticeText) text = noticeText;
+    else if (!navigator.onLine) text = outbox.length ? '離線中・' + outbox.length + ' 項變更連線後同步' : '離線中';
     else if (!bridge && frame && Date.now() - startedAt > 24000) { text = '無法連線到 Google・點這裡登入'; link = true; }
     p.textContent = text;
     p.classList.toggle('show', !!text);
     p.classList.toggle('link', link);
+    showSync();
   }
   var startedAt = Date.now();
   $('pill').addEventListener('click', function () {
@@ -361,11 +373,19 @@
     });
     d.addEventListener('pointermove', function (e) {
       if (!s) return;
+      if (s.page) { pageMove(e.clientX); return; }
       s.dx = e.clientX - s.x; s.dy = e.clientY - s.y;
       var dist = Math.sqrt(s.dx * s.dx + s.dy * s.dy);
       if (!s.mv) {
         if (dist <= (s.lg ? 10 : 12)) return;
         if (s.touch && !s.lg && Math.abs(s.dy) > Math.abs(s.dx)) { cancel(); return; }    // 手機上直向滑＝捲動清單
+        if (kind === 'd' && !s.lg && s.dx > 0 && Math.abs(s.dx) >= Math.abs(s.dy)) {      // 已完成頁往右滑＝回待辦
+          clearTimeout(s.tm);
+          d.classList.remove('press');
+          s.page = true; s.mv = true;
+          pageBegin(s.x, false); pageMove(e.clientX);
+          return;
+        }
         s.mv = true; dragging = true;
         clearTimeout(s.tm);
         if (s.lg) { closeSheet(false, true); d.classList.remove('edit'); }
@@ -385,6 +405,7 @@
     function cancel() {
       if (!s) return;
       clearTimeout(s.tm);
+      if (s.page) pageEnd();
       s = null; dragging = false;
       d.classList.remove('press', 'drag', 'ok');
       d.style.translate = ''; d.style.scale = ''; d.style.opacity = '';
@@ -395,6 +416,7 @@
       if (!s) return;
       clearTimeout(s.tm);
       var st = s; s = null;
+      if (st.page) { pageEnd(); return; }
       var hot = TR.classList.contains('hot');
       d.classList.remove('press', 'drag');
       if (!st.mv && st.lg) return;                                   // 按住後放開：編輯面板留著
@@ -434,8 +456,33 @@
     openId = was ? null : id;
   }
 
-  // ---------- 換頁：右邊緣往左滑＝已完成，左邊緣往右滑＝回待辦（手機的返回鍵也會回待辦）----------
-  var APP = $('app');
+  // ---------- 換頁：待辦頁從右邊緣往左滑＝已完成；已完成頁任何地方往右滑＝回待辦（手機的返回鍵也會回待辦）----------
+  var APP = $('app'), PM = $('pm'), PD = $('pd');
+  var pager = { on: false, opening: false, x0: 0, dx: 0, v: 0, lx: 0, lt: 0, W: 1 };
+  function clamp01(n) { return Math.min(1, Math.max(0, n)); }
+  function pageBegin(x, opening) {
+    pager.on = true; pager.opening = opening; pager.x0 = pager.lx = x; pager.dx = 0; pager.v = 0;
+    pager.lt = performance.now(); pager.W = APP.offsetWidth || 1;
+    APP.classList.add('nodrag');
+  }
+  function pageMove(x) {
+    if (!pager.on) return;
+    var now = performance.now();
+    pager.dx = x - pager.x0; pager.v = (x - pager.lx) / Math.max(1, now - pager.lt); pager.lx = x; pager.lt = now;
+    var prog = pager.opening ? clamp01(-pager.dx / pager.W) : clamp01(1 - pager.dx / pager.W);
+    PD.style.translate = ((1 - prog) * 100) + '% 0';
+    PM.style.translate = (-28 * prog) + '% 0';
+  }
+  function pageEnd() {
+    if (!pager.on) return;
+    pager.on = false;
+    var prog = pager.opening ? Math.max(0, -pager.dx / pager.W) : Math.max(0, 1 - pager.dx / pager.W);
+    var open = pager.opening ? (prog > 0.33 || pager.v < -0.5) : !(prog < 0.67 || pager.v > 0.5);
+    APP.classList.remove('nodrag');
+    void APP.offsetHeight;
+    PD.style.translate = ''; PM.style.translate = '';
+    setDone(open);
+  }
   function setDone(open, fromHistory) {
     if (open === APP.classList.contains('dopen')) return;
     APP.classList.toggle('dopen', open);
@@ -449,39 +496,36 @@
     if (sheet.open) { closeSheet(false, false, true); return; }
     setDone(!!(history.state && history.state.page === 'done'), true);
   });
-  function edge(z, opening) {
-    var p = null, W = 0, PM = $('pm'), PD = $('pd');
+  (function rightEdge() {                       // 待辦頁：只有最右邊緣
+    var z = $('er'), on = false;
     z.addEventListener('pointerdown', function (e) {
       if (e.button) return;
       try { z.setPointerCapture(e.pointerId); } catch (x) {}
-      W = APP.offsetWidth;
-      p = { x: e.clientX, dx: 0, v: 0, lx: e.clientX, lt: performance.now() };
-      APP.classList.add('nodrag');
+      on = true; pageBegin(e.clientX, true);
     });
-    z.addEventListener('pointermove', function (e) {
-      if (!p) return;
-      p.dx = e.clientX - p.x;
-      var now = performance.now();
-      p.v = (e.clientX - p.lx) / Math.max(1, now - p.lt); p.lx = e.clientX; p.lt = now;
-      var prog = opening ? Math.min(1, Math.max(0, -p.dx / W)) : Math.min(1, Math.max(0, 1 - p.dx / W));
-      PD.style.translate = ((1 - prog) * 100) + '% 0';
-      PM.style.translate = (-28 * prog) + '% 0';
+    z.addEventListener('pointermove', function (e) { if (on) pageMove(e.clientX); });
+    ['pointerup', 'pointercancel'].forEach(function (t) { z.addEventListener(t, function () { if (on) { on = false; pageEnd(); } }); });
+  })();
+  (function donePageSwipe() {                   // 已完成頁：空白處、選項區也能往右滑回去（卡片上的往右滑在 gesture() 裡處理）
+    var c = null;
+    PD.addEventListener('pointerdown', function (e) {
+      if (e.button || e.target.closest('.cd, input, textarea')) { c = null; return; }
+      c = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false };
     });
-    function rel() {
-      if (!p) return;
-      var q = p; p = null;
-      var prog = opening ? Math.max(0, -q.dx / W) : Math.max(0, 1 - q.dx / W);
-      var open = opening ? (prog > 0.33 || q.v < -0.5) : !(prog < 0.67 || q.v > 0.5);
-      APP.classList.remove('nodrag');
-      void APP.offsetHeight;
-      PD.style.translate = ''; PM.style.translate = '';
-      setDone(open);
-    }
-    z.addEventListener('pointerup', rel);
-    z.addEventListener('pointercancel', rel);
-  }
-  edge($('er'), true);
-  edge($('el'), false);
+    PD.addEventListener('pointermove', function (e) {
+      if (!c) return;
+      var dx = e.clientX - c.x, dy = e.clientY - c.y;
+      if (!c.on) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        if (Math.abs(dy) > Math.abs(dx) || dx < 0) { c = null; return; }
+        c.on = true;
+        try { PD.setPointerCapture(c.id); } catch (x) {}
+        pageBegin(c.x, false);
+      }
+      pageMove(e.clientX);
+    });
+    ['pointerup', 'pointercancel'].forEach(function (t) { PD.addEventListener(t, function () { if (c && c.on) pageEnd(); c = null; }); });
+  })();
 
   // ---------- 新增／編輯面板 ----------
   var SH = $('sh'), BD = $('bd'), OK = $('ok');
@@ -522,7 +566,7 @@
     var f = id ? findItem(id) : null;
     if (mode === 'edit' && !f) return;
     sheet.open = true; sheet.mode = mode; sheet.id = id || null; sheet.kind = f ? f.kind : '';
-    var it = f ? f.it : { title: '', note: '', deadline: 0, ahead: DEF_AHEAD, every: DEF_EVERY };
+    var it = f ? f.it : { title: '', note: '', deadline: 0, ahead: prefs.ahead, every: prefs.every };
     $('ft').value = it.title; $('fnote').value = it.note || '';
     sheet.deadline = it.deadline; sheet.orig0 = it.deadline;
     $('fd').value = it.deadline ? toLocalInput(it.deadline) : '';
@@ -560,7 +604,6 @@
       return;
     }
     push({ type: 'update', id: sheet.id, data: f }, 300);
-    if (!quiet) toast(sheet.kind === 'd' ? '已更新並移回「' + f.title + '」' : '已更新「' + f.title + '」');
   }
   $('cp').addEventListener('click', function () { openSheet('add'); });
   BD.addEventListener('click', function () { closeSheet(false); });
@@ -586,16 +629,30 @@
   }
   unitToggle('ua', 'fa', 'ua');
   unitToggle('ue', 'fe', 'ue');
+  /* 往下拉關掉面板：從上方灰色橫條一直到標題、說明那一列都可以拉；
+     在標題／說明上輕點還是照常輸入，往下拉超過一點點才算拉面板 */
   (function pull() {
-    var z = $('gz'), p = null;
+    var z = $('shtop'), p = null;
     z.addEventListener('pointerdown', function (e) {
-      if (e.button) return;
-      try { z.setPointerCapture(e.pointerId); } catch (x) {}
-      p = { y: e.clientY, h: SH.offsetHeight, dy: 0, vy: 0, ly: e.clientY, lt: performance.now() };
-      SH.style.transition = 'none'; BD.style.transition = 'none';
+      if (e.button || e.target.closest('#ok')) return;
+      p = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false, h: SH.offsetHeight, dy: 0, vy: 0, ly: e.clientY, lt: performance.now() };
+      if (e.target.closest('.gz')) start();
     });
+    function start() {
+      p.on = true;
+      try { z.setPointerCapture(p.id); } catch (x) {}
+      if (document.activeElement && document.activeElement.blur && z.contains(document.activeElement)) document.activeElement.blur();
+      try { window.getSelection().removeAllRanges(); } catch (x) {}
+      SH.style.transition = 'none'; BD.style.transition = 'none';
+    }
     z.addEventListener('pointermove', function (e) {
       if (!p) return;
+      if (!p.on) {
+        var mx = e.clientX - p.x, my = e.clientY - p.y;
+        if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+        if (my > 0 && my > Math.abs(mx)) start(); else { p = null; return; }
+      }
+      e.preventDefault();
       var dy = e.clientY - p.y; dy = dy < 0 ? dy * 0.15 : dy; p.dy = dy;
       var now = performance.now(); p.vy = (e.clientY - p.ly) / Math.max(1, now - p.lt); p.ly = e.clientY; p.lt = now;
       SH.style.translate = '0 ' + dy + 'px';
@@ -604,6 +661,7 @@
     function rel() {
       if (!p) return;
       var q = p; p = null;
+      if (!q.on) return;
       SH.style.transition = ''; BD.style.transition = '';
       void SH.offsetHeight;
       SH.style.translate = ''; BD.style.opacity = '';
@@ -613,8 +671,53 @@
     z.addEventListener('pointercancel', rel);
   })();
 
+  // ---------- 選項（已完成頁最上面）：外觀、新項目的預設提醒、同步狀態。存在這台裝置上 ----------
+  function themeColor() { var dark = document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches); return dark ? '#000000' : '#f2f2f7'; }
+  function applyTheme(t) {
+    if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute('content', t ? themeColor() : (m.media.indexOf('dark') >= 0 ? '#000000' : '#f2f2f7')); });
+    document.querySelectorAll('#theme button').forEach(function (b) { var on = b.getAttribute('data-v') === (t || ''); b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+  }
+  document.querySelectorAll('#theme button').forEach(function (b) {
+    b.addEventListener('click', function () { var t = b.getAttribute('data-v'); try { if (t) localStorage.setItem(KEY_THEME, t); else localStorage.removeItem(KEY_THEME); } catch (e) {} applyTheme(t); });
+  });
+  var defUnits = { a: prefs.ahead >= 24 && prefs.ahead % 24 === 0 && prefs.ahead > 72 ? 'd' : 'h', e: 'h' };
+  showNum($('da'), prefs.ahead, defUnits.a); setUnit($('dua'), defUnits.a);
+  showNum($('de'), prefs.every, defUnits.e); setUnit($('due'), defUnits.e);
+  function saveDefaults() {
+    var a = numOf($('da'), defUnits.a), e = numOf($('de'), defUnits.e);
+    var okA = isFinite(a) && a >= 0 && a <= MAX_AHEAD, okE = isFinite(e) && e >= 1 && e <= MAX_AHEAD;
+    $('da').closest('.row').classList.toggle('bad', !okA);
+    $('de').closest('.row').classList.toggle('bad', !okE);
+    if (okA && okE) { prefs = { ahead: a, every: e }; save(KEY_DEF, prefs); }
+  }
+  $('da').addEventListener('input', saveDefaults);
+  $('de').addEventListener('input', saveDefaults);
+  [['dua', 'da', 'a'], ['due', 'de', 'e']].forEach(function (x) {
+    $(x[0]).addEventListener('click', function () {
+      var hours = numOf($(x[1]), defUnits[x[2]]);
+      defUnits[x[2]] = defUnits[x[2]] === 'h' ? 'd' : 'h';
+      setUnit(this, defUnits[x[2]]);
+      if (isFinite(hours)) showNum($(x[1]), hours, defUnits[x[2]]);
+    });
+  });
+  function showSync() {
+    var s = $('syncInfo'); if (!s) return;
+    var t = !navigator.onLine ? '離線中' : (busy ? '同步中…' : (lastSync ? '已同步 ' + md(lastSync) + hm(lastSync) : (base && base.at ? '上次同步 ' + md(base.at) + hm(base.at) : '尚未同步')));
+    if (outbox.length) t += '・' + outbox.length + ' 項變更待同步';
+    s.textContent = t;
+  }
+  (function () { var t = ''; try { t = localStorage.getItem(KEY_THEME) || ''; } catch (e) {} applyTheme(t); })();
+
   // ---------- 啟動 ----------
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  if ('serviceWorker' in navigator) {
+    // 有新版時：剛打開幾秒內、沒在操作，就直接換成新版（資料在本機，重新載入是瞬間的）
+    var hadSW = !!navigator.serviceWorker.controller, t0 = Date.now();
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (hadSW && Date.now() - t0 < 10000 && !sheet.open && !dragging && !pager.on) location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
   render({ bottom: true });
   updatePill();
   if (navigator.onLine) startBridge();
