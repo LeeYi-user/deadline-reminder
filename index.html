@@ -4,68 +4,65 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Deadline 提醒</title>
-<meta name="description" content="輸入主旨和截止時間，Google 日曆和電腦會照規則提醒你。">
+<meta name="description" content="輸入標題、說明和截止時間，Google 日曆和電腦會照你設的時間提醒你。">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-64.png" sizes="64x64" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
-<style>
-  :root { color-scheme: light dark; --bg: #f5f6f8; --text: #1d2330; --muted: #677083; --accent: #2563eb; --accent-text: #fff; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #111418; --text: #e7e9ee; --muted: #9aa2b1; --accent: #4d8bff; --accent-text: #0b1220; }
-  }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
-  #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
-  #splash { position: fixed; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 14px; padding: 24px; background: var(--bg); text-align: center; transition: opacity .25s; }
-  #splash.gone { opacity: 0; pointer-events: none; }
-  #splash img { width: 88px; height: 88px; }
-  #splash h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  #status { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 320px; }
-  #direct { display: none; padding: 11px 20px; border-radius: 10px; background: var(--accent); color: var(--accent-text);
-    text-decoration: none; font-weight: 600; }
-</style>
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="app.css?v=3">
 </head>
 <body>
-<div id="splash">
-  <img src="icon-192.png" alt="">
-  <h1>Deadline 提醒</h1>
-  <p id="status">載入中…</p>
-  <a id="direct">直接開啟</a>
+<div id="app">
+  <div class="pg" id="pm">
+    <div id="list" class="list"><div class="empty">載入中…</div></div>
+    <div class="cp" id="cp" role="button" tabindex="0" aria-label="新增">
+      <span class="cpt">新增 Deadline：標題</span>
+      <span class="send"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M3 20.5 21 12 3 3.5l.01 6.6L15 12 3.01 13.9z"/></svg></span>
+    </div>
+  </div>
+  <div class="pg" id="pd"><div id="dl" class="list"></div></div>
+  <div class="edge" id="er"></div>
+  <div class="edge" id="el"></div>
+  <div class="pill" id="pill" role="status"></div>
+
+  <div class="bd" id="bd"></div>
+  <div class="sh" id="sh" role="dialog" aria-modal="true" aria-label="編輯">
+    <div class="gz" id="gz"><div class="grab"></div></div>
+    <div class="top">
+      <div class="fields">
+        <input id="ft" type="text" placeholder="標題" maxlength="200" autocomplete="off" enterkeyhint="next">
+        <textarea id="fnote" placeholder="說明" rows="1" maxlength="2000"></textarea>
+      </div>
+      <button type="button" id="ok" class="send off" aria-label="儲存">
+        <svg class="i-send" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M3 20.5 21 12 3 3.5l.01 6.6L15 12 3.01 13.9z"/></svg>
+        <svg class="i-ok" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </button>
+    </div>
+    <div class="hr"></div>
+    <label class="row dt">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16v13.5H4zM4 10.5h16M8.5 3.5v4M15.5 3.5v4"/></svg>
+      <span id="fdv" class="dv">選擇日期和時間</span><span class="sf2">截止</span>
+      <input id="fd" type="datetime-local" aria-label="截止日期和時間">
+    </label>
+    <div class="row">
+      <span class="lb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3H4a4 4 0 0 0 2-3v-3a7 7 0 0 1 4-6M9.5 17v1a2.5 2.5 0 0 0 5 0v-1"/></svg>提前</span>
+      <input id="fa" class="v" type="text" inputmode="decimal" autocomplete="off" aria-label="提前多久開始提醒">
+      <button type="button" class="u" id="ua" aria-label="切換單位">小時</button>
+      <span class="sf">開始提醒</span>
+    </div>
+    <div class="row">
+      <span class="lb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12V9.5a3 3 0 0 1 3-3h12.5M16.5 3.5l3 3-3 3M20 12v2.5a3 3 0 0 1-3 3H4.5M7.5 20.5l-3-3 3-3"/></svg>每隔</span>
+      <input id="fe" class="v" type="text" inputmode="decimal" autocomplete="off" aria-label="每隔多久提醒一次">
+      <button type="button" class="u" id="ue" aria-label="切換單位">小時</button>
+      <span class="sf">提醒一次</span>
+    </div>
+  </div>
+
+  <div class="tr" id="tr"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5.5 7l1 12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2l1-12M9 7V4.5h6V7"/></svg></div>
+  <div class="toast" id="toast"><span id="tmsg"></span><button type="button" id="undo">復原</button></div>
 </div>
-<iframe id="app" title="Deadline 提醒"></iframe>
-<script>
-  // 實際的 App 是 Google Apps Script 網頁（資料在你的 Google 日曆），這一頁只是可安裝的外框。
-  var APP_URL = 'https://script.google.com/macros/s/AKfycbwtwa-FT9e2HZ1245SuyV-ABjFjVJk8I9SGNOf7eZ9UaXwSYGwa0ritn-p4igdSSBq5gw/exec';
-  var splash = document.getElementById('splash');
-  var msg = document.getElementById('status');
-  var direct = document.getElementById('direct');
-  var ready = false;
-  direct.href = APP_URL;
-
-  // 網頁 App 載入成功時會送來 'deadline-reminder:ready'
-  window.addEventListener('message', function (e) {
-    if (e.data !== 'deadline-reminder:ready' || !/\.googleusercontent\.com$/.test(e.origin)) return;
-    ready = true;
-    splash.classList.add('gone');
-  });
-
-  function slow() {
-    if (ready) return;
-    msg.textContent = navigator.onLine
-      ? '載入太久了。可能是手機的 Chrome 沒有登入建立這個 App 的 Google 帳號，或擋了第三方 Cookie。'
-      : '沒有網路連線。連上網路後再開一次。';
-    direct.style.display = navigator.onLine ? 'inline-block' : 'none';
-  }
-
-  document.getElementById('app').src = APP_URL;
-  setTimeout(slow, 25000);
-  window.addEventListener('online', function () { if (!ready) location.reload(); });
-
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
-</script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

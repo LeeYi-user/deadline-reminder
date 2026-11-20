@@ -1,7 +1,7 @@
-// 只快取這個外框（頁面和圖示），讓 App 開得快、離線時也能顯示「沒有網路」。
-// 實際資料由 Google Apps Script 網頁提供，不經過這裡。
-var CACHE = 'deadline-shell-v2';
-var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
+// App 本體（頁面、程式、圖示）先從快取拿，開啟幾乎不用等；同時在背景向網路要新版，下次開就是新版。
+// 資料不經過這裡（資料存在 localStorage，同步走 Google Apps Script）。
+var CACHE = 'deadline-shell-v3';
+var FILES = ['./', 'index.html', 'app.js?v=3', 'app.css?v=3', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png'];
 
 self.addEventListener('install', function (e) {
@@ -15,15 +15,17 @@ self.addEventListener('activate', function (e) {
   }).then(function () { return self.clients.claim(); }));
 });
 
-// 先用網路（拿到最新版），沒網路才用快取
 self.addEventListener('fetch', function (e) {
-  var url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  e.respondWith(fetch(e.request).then(function (r) {
-    var copy = r.clone();
-    caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
-    return r;
-  }).catch(function () {
-    return caches.match(e.request, { ignoreSearch: true }).then(function (r) { return r || caches.match('index.html'); });
+  var req = e.request, url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  e.respondWith(caches.open(CACHE).then(function (cache) {
+    return cache.match(req).then(function (hit) {
+      var net = fetch(req).then(function (res) {
+        if (res && res.ok) cache.put(req, res.clone());
+        return res;
+      }).catch(function () { return hit || cache.match('index.html'); });
+      if (hit) { e.waitUntil(net.then(function () {}, function () {})); return hit; }
+      return net;
+    });
   }));
 });
