@@ -18,7 +18,6 @@
       BRIDGE_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
     }
   })();
-  var APP_VERSION = 13;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
   var KEY_BASE = 'dr.base.v3', KEY_OUT = 'dr.outbox.v3';
   var DEF_AHEAD = 72, DEF_EVERY = 24, MAX_AHEAD = 720;
   var HOUR = 3600000, DAY = 24 * HOUR;
@@ -944,7 +943,7 @@
     var s = $('syncInfo'); if (!s) return;
     var t = !navigator.onLine ? '離線中' : (busy ? '同步中…' : (lastSync ? '已同步 ' + md(lastSync) + hm(lastSync) : (base && base.at ? '上次同步 ' + md(base.at) + hm(base.at) : '尚未同步')));
     if (outbox.length) t += '・' + outbox.length + ' 項變更待同步';
-    s.textContent = t + '・版本 ' + APP_VERSION;
+    s.textContent = t;
   }
   (function () { var t = ''; try { t = localStorage.getItem(KEY_THEME) || ''; } catch (e) {} applyTheme(t); })();
 
