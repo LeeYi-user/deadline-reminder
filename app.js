@@ -18,7 +18,7 @@
       BRIDGE_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
     }
   })();
-  var APP_VERSION = 10;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
+  var APP_VERSION = 11;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
   var KEY_BASE = 'dr.base.v3', KEY_OUT = 'dr.outbox.v3';
   var DEF_AHEAD = 72, DEF_EVERY = 24, MAX_AHEAD = 720;
   var HOUR = 3600000, DAY = 24 * HOUR;
@@ -642,7 +642,20 @@
     else { dv.textContent = '沒有截止（單純紀錄）'; dv.classList.add('ph'); }
     SH.classList.toggle('nodl', !sheet.deadline);
   }
-  function growNote() { var t = $('fnote'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; noteScroll(); }
+  // 說明欄跟著內容長高：平常最多 140px；面板拉高時可以長到把下面多出來的空間用完（下面的列跟著往下，但不會被擠出面板）
+  function growNote() {
+    var t = $('fnote'), cap = 140;
+    t.style.height = 'auto';
+    if (SH.classList.contains('grow')) {
+      var kids = SH.children, last = null;
+      for (var i = kids.length - 1; i >= 0 && !last; i--) if (kids[i].getClientRects().length) last = kids[i];
+      var pad = parseFloat(getComputedStyle(SH).paddingBottom) || 0;
+      var free = last ? SH.getBoundingClientRect().bottom - pad - last.getBoundingClientRect().bottom : 0;
+      cap = Math.max(140, t.offsetHeight + free);
+    }
+    t.style.height = Math.min(t.scrollHeight, cap) + 'px';
+    noteScroll();
+  }
   function noteScroll() { var t = $('fnote'); t.classList.toggle('scroll', t.scrollHeight > t.clientHeight + 1); }   // 說明要捲動時才讓手指捲它
   function openSheet(mode, id) {
     var f = id ? findItem(id) : null;
@@ -785,12 +798,18 @@
         sheet.big = true; sheet.h0 = q.h0;
         SH.style.height = q.max + 'px';
         SH.classList.add('big');
-        sizeTimer = setTimeout(function () { if (sheet.big) SH.style.height = ''; noteScroll(); }, 420);   // 之後用 CSS 的 92%（鍵盤跳出來也會跟著縮）
+        sizeTimer = setTimeout(function () { if (sheet.big) { SH.style.height = ''; growNote(); } }, 420);   // 之後用 CSS 的 92%（鍵盤跳出來也會跟著縮）
       } else {
         sheet.big = false;
-        SH.style.height = q.h0 + 'px';
-        SH.classList.remove('big');
-        sizeTimer = setTimeout(function () { resetSheetSize(); noteScroll(); }, 420);
+        var cur = SH.offsetHeight;                 // 縮回「依內容」的高度（說明在拉高時寫長了也算進去，最多 140px）
+        SH.classList.remove('big', 'grow');
+        growNote();
+        SH.style.transition = 'none'; SH.style.height = '';
+        var natural = SH.offsetHeight;
+        SH.style.height = cur + 'px'; void SH.offsetHeight;
+        SH.style.transition = '';
+        SH.style.height = natural + 'px';
+        sizeTimer = setTimeout(resetSheetSize, 420);
       }
     }
     z.addEventListener('pointerup', rel);

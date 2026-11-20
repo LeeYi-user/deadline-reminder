@@ -115,12 +115,10 @@ svg .fill { fill: currentColor; stroke: none; }
 .sh.show { translate: 0 0; }
 .sh:not(.show) { pointer-events: none; }   /* 收下去的途中不擋點擊（例如存完馬上點輸入列） */
 .sh > .row { flex: none; }
-/* 從上方往上拉：面板拉高，多出來的高度都給說明欄 */
+/* 從上方往上拉：面板拉高，標題、說明、日期、提醒設定整組跟著上緣往上走，多出來的空間在最下面；
+   說明寫長了會往下長到用完這些空間（app.js 的 growNote） */
 .sh.big { height: 92%; }
-.sh.grow #shtop { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.sh.grow .top { flex: 1 1 auto; min-height: 0; }
-.sh.grow .fields { align-self: stretch; display: flex; flex-direction: column; }
-.sh.grow #fnote { flex: 1 1 auto; max-height: none; min-height: 0; }
+.sh.grow #fnote { max-height: none; }
 #shtop { touch-action: none; cursor: grab; }
 #shtop #ft, #shtop #fnote { touch-action: none; }   /* 輸入框自己會捲動，不關掉的話手機上從標題／說明拉面板會被瀏覽器搶走 */
 #shtop #fnote.scroll { touch-action: pan-y; }       /* 說明長到要捲時：上下滑＝捲說明（面板改從灰色橫條或標題拉） */
