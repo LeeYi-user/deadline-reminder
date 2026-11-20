@@ -582,10 +582,12 @@
     if (sheet.deadline) { dv.textContent = fullDate(sheet.deadline) + hm(sheet.deadline); dv.classList.remove('ph'); }
     else { dv.textContent = '選擇日期和時間'; dv.classList.add('ph'); }
   }
-  function growNote() { var t = $('fnote'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
+  function growNote() { var t = $('fnote'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; noteScroll(); }
+  function noteScroll() { var t = $('fnote'); t.classList.toggle('scroll', t.scrollHeight > t.clientHeight + 1); }   // 說明要捲動時才讓手指捲它
   function openSheet(mode, id) {
     var f = id ? findItem(id) : null;
     if (mode === 'edit' && !f) return;
+    resetSheetSize();
     sheet.open = true; sheet.mode = mode; sheet.id = id || null; sheet.kind = f ? f.kind : '';
     var it = f ? f.it : { title: '', note: '', deadline: 0, ahead: prefs.ahead, every: prefs.every };
     $('ft').value = it.title; $('fnote').value = it.note || '';
@@ -613,6 +615,7 @@
     sheet.open = false;
     if (!fromHistory && history.state && history.state.sheet) { skipPop++; history.back(); }
     SH.classList.remove('show'); BD.classList.remove('show');
+    clearTimeout(sizeTimer); sizeTimer = setTimeout(resetSheetSize, 450);   // 收下去之後再恢復原本大小
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     document.querySelectorAll('.cd.edit').forEach(function (c) { c.classList.remove('edit'); });
     if (!f) return;
@@ -650,13 +653,23 @@
   }
   unitToggle('ua', 'fa', 'ua');
   unitToggle('ue', 'fe', 'ue');
-  /* 往下拉關掉面板：從上方灰色橫條一直到標題、說明那一列都可以拉；
-     在標題／說明上輕點還是照常輸入，往下拉超過一點點才算拉面板 */
+  /* 面板上方（灰色橫條一直到標題、說明那一列）：往上拉＝把面板拉高（說明欄跟著變大，可以寫長一點），
+     往下拉＝縮回原本大小，再往下＝關掉。在標題／說明上輕點還是照常輸入，拖超過一點點才算拉面板。 */
+  var sizeTimer = null;
+  function resetSheetSize() {                   // 面板回到依內容決定的高度
+    clearTimeout(sizeTimer);
+    sheet.big = false;
+    SH.classList.remove('grow', 'big');
+    SH.style.height = ''; SH.style.translate = '';
+  }
   (function pull() {
     var z = $('shtop'), p = null;
     z.addEventListener('pointerdown', function (e) {
       if (e.button || e.target.closest('#ok')) return;
-      p = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false, h: SH.offsetHeight, dy: 0, vy: 0, ly: e.clientY, lt: performance.now() };
+      if (e.pointerType === 'mouse' && e.target.closest('textarea')) return;   // 滑鼠在說明欄裡拖＝選字
+      clearTimeout(sizeTimer);
+      var h = SH.offsetHeight, h0 = sheet.big ? sheet.h0 : h;
+      p = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false, h: h, h0: h0, max: Math.max(h0, Math.round(APP.clientHeight * 0.92)), dy: 0, pts: [] };
       if (e.target.closest('.gz')) start();
     });
     function start() {
@@ -665,28 +678,55 @@
       if (document.activeElement && document.activeElement.blur && z.contains(document.activeElement)) document.activeElement.blur();
       try { window.getSelection().removeAllRanges(); } catch (x) {}
       SH.style.transition = 'none'; BD.style.transition = 'none';
+      SH.style.height = p.h + 'px';
+      SH.classList.add('grow');                   // 說明欄填滿多出來的高度
+    }
+    function place(V) {                           // V＝面板露出來的高度
+      if (V >= p.h0) { SH.style.height = Math.min(V, p.max) + 'px'; SH.style.translate = '0 0'; BD.style.opacity = ''; }
+      else { SH.style.height = p.h0 + 'px'; SH.style.translate = '0 ' + (p.h0 - V) + 'px'; BD.style.opacity = String(Math.max(0, V / p.h0)); }
     }
     z.addEventListener('pointermove', function (e) {
       if (!p) return;
       if (!p.on) {
         var mx = e.clientX - p.x, my = e.clientY - p.y;
         if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
-        if (my > 0 && my > Math.abs(mx)) start(); else { p = null; return; }
+        if (Math.abs(my) > Math.abs(mx)) start(); else { p = null; return; }
       }
       e.preventDefault();
-      var dy = e.clientY - p.y; dy = dy < 0 ? dy * 0.15 : dy; p.dy = dy;
-      var now = performance.now(); p.vy = (e.clientY - p.ly) / Math.max(1, now - p.lt); p.ly = e.clientY; p.lt = now;
-      SH.style.translate = '0 ' + dy + 'px';
-      BD.style.opacity = String(Math.max(0, 1 - dy / p.h));
+      var now = performance.now();
+      p.dy = e.clientY - p.y;
+      p.pts.push([now, e.clientY]);
+      while (p.pts.length > 2 && now - p.pts[0][0] > 100) p.pts.shift();
+      place(p.h - p.dy);
     });
     function rel() {
       if (!p) return;
       var q = p; p = null;
       if (!q.on) return;
+      var now = performance.now(), a = q.pts[0], b = q.pts[q.pts.length - 1];
+      var vy = !a || now - b[0] > 120 ? 0 : (b[1] - a[1]) / Math.max(16, b[0] - a[0]);   // px/ms，正＝往下甩
+      var V = q.h - q.dy, span = q.max - q.h0, wasBig = q.h > q.h0 + 1, to;
+      if (V < q.h0) to = vy < -0.2 ? 'normal' : (q.h0 - V > q.h0 * 0.25 || vy > 0.6) ? 'close' : 'normal';
+      else if (vy < -0.2) to = 'big';                                  // 輕輕往上甩就拉高
+      else if (vy > 0.2) to = 'normal';                                // 往下甩先縮回原本大小
+      else if (wasBig) to = V < q.max - span * 0.2 ? 'normal' : 'big';
+      else to = V > q.h0 + span * 0.2 ? 'big' : 'normal';
+      if (span < 8 && to === 'big') to = 'normal';
       SH.style.transition = ''; BD.style.transition = '';
       void SH.offsetHeight;
       SH.style.translate = ''; BD.style.opacity = '';
-      if (q.dy > q.h * 0.25 || q.vy > 0.6) closeSheet(false);
+      if (to === 'close') { closeSheet(false); return; }
+      if (to === 'big') {
+        sheet.big = true; sheet.h0 = q.h0;
+        SH.style.height = q.max + 'px';
+        SH.classList.add('big');
+        sizeTimer = setTimeout(function () { if (sheet.big) SH.style.height = ''; noteScroll(); }, 420);   // 之後用 CSS 的 92%（鍵盤跳出來也會跟著縮）
+      } else {
+        sheet.big = false;
+        SH.style.height = q.h0 + 'px';
+        SH.classList.remove('big');
+        sizeTimer = setTimeout(function () { resetSheetSize(); noteScroll(); }, 420);
+      }
     }
     z.addEventListener('pointerup', rel);
     z.addEventListener('pointercancel', rel);
