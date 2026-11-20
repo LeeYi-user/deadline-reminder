@@ -12,7 +12,29 @@
 <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <script>try { var t = localStorage.getItem('dr.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
-<link rel="stylesheet" href="app.css?v=7">
+<script>
+/* 保險：頁面載完程式卻沒跑起來（例如 App 快取壞掉，畫面卡在「載入中…」）時，清掉 App 本體的快取再重新載入一次。
+   你的資料（清單、待同步的變更）存在 localStorage，不受影響。 */
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    if (window.__drOK) return;
+    var n = 0;
+    try { n = +sessionStorage.getItem('dr.recover') || 0; sessionStorage.setItem('dr.recover', n + 1); } catch (e) {}
+    var box = document.querySelector('#list .empty');
+    if (n >= 1) {
+      if (box) { var a = document.createElement('a'); a.href = location.href; a.textContent = '點這裡重新載入'; a.style.color = '#0a84ff';
+        box.textContent = 'App 沒有正常啟動。'; box.appendChild(a); }
+      return;
+    }
+    if (box) box.textContent = '更新中…';
+    var jobs = [];
+    try { if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+    try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); } catch (e) {}
+    Promise.all(jobs).then(function () { location.reload(); }, function () { location.reload(); });
+  }, 1500);
+});
+</script>
+<link rel="stylesheet" href="app.css?v=8">
 </head>
 <body>
 <div id="app">
@@ -86,6 +108,6 @@
   <div class="tr" id="tr"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5.5 7l1 12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2l1-12M9 7V4.5h6V7"/></svg></div>
   <div class="toast" id="toast"><span id="tmsg"></span><button type="button" id="undo">復原</button></div>
 </div>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

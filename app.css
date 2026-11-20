@@ -6,7 +6,7 @@
   --accent: #007aff; --on-accent: #ffffff;
   --r: #ff3b30; --y: #ffcc00; --g: #34c759; --x: #8e8e93;
   --pill: rgba(118, 118, 128, .12); --seg-on: #ffffff;
-  --toast: rgba(28, 28, 30, .94); --on-toast: #ffffff;
+  --toast: #1c1c1e; --on-toast: #ffffff;
   --spring: cubic-bezier(.22, 1.2, .36, 1); --ease: cubic-bezier(.25, .1, .25, 1); --nav: cubic-bezier(.2, .9, .25, 1);
 }
 /* 深色：選項選「深色」，或選「自動」且系統是深色 */
@@ -17,7 +17,7 @@
   --accent: #0a84ff;
   --r: #ff453a; --y: #ffd60a; --g: #30d158; --x: #98989d;
   --pill: rgba(118, 118, 128, .24); --seg-on: #636366;
-  --toast: rgba(58, 58, 60, .96);
+  --toast: #3a3a3c;
 }
 :root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
@@ -27,7 +27,7 @@
     --accent: #0a84ff;
     --r: #ff453a; --y: #ffd60a; --g: #30d158; --x: #98989d;
     --pill: rgba(118, 118, 128, .24); --seg-on: #636366;
-    --toast: rgba(58, 58, 60, .96);
+    --toast: #3a3a3c;
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -151,12 +151,13 @@ svg .fill { fill: currentColor; stroke: none; }
 .tr.show { translate: 0 0; }
 .tr.hot { background: var(--r); color: #fff; border-color: var(--r); scale: 1.12; }
 
-.toast { position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); width: min(420px, calc(100% - 24px)); translate: -50% 10px;
-  background: var(--toast); color: var(--on-toast); border-radius: 14px; padding: 11px 16px; font-size: 14px; display: flex; justify-content: space-between;
-  align-items: center; gap: 12px; opacity: 0; pointer-events: none; transition: opacity .25s var(--ease), translate .3s var(--spring); z-index: 45; }
+/* 復原提示：蓋在最下面的輸入列上（在垃圾桶下方，不擋垃圾桶；單手拇指也按得到右邊的「復原」） */
+.toast { position: absolute; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); width: min(640px, calc(100% - 20px)); min-height: 49px; translate: -50% 14px;
+  background: var(--toast); color: var(--on-toast); border-radius: 22px; padding: 4px 4px 4px 16px; font-size: 14px; display: flex; justify-content: space-between;
+  align-items: center; gap: 10px; opacity: 0; pointer-events: none; transition: opacity .22s var(--ease), translate .3s var(--spring); z-index: 45; }
 .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
 .toast #tmsg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.toast #undo { color: #64d2ff; font-weight: 600; white-space: nowrap; padding: 2px 0; }
+.toast #undo { color: #64d2ff; font-weight: 600; white-space: nowrap; height: 41px; padding: 0 20px; border-radius: 999px; background: rgba(100, 210, 255, .16); flex: none; }
 .toast.noundo #undo { display: none; }
 
 .pill { position: absolute; left: 50%; top: max(8px, env(safe-area-inset-top)); translate: -50% -60px; background: var(--toast); color: var(--on-toast);

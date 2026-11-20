@@ -155,8 +155,8 @@
     return new Promise(function (res, rej) {
       if (!bridge) { rej(new Error('not ready')); return; }
       var id = ++seq;
-      var t = setTimeout(function () { delete calls[id]; rej(new Error('timeout')); }, 90000);
-      calls[id] = { res: res, rej: rej, t: t };
+      var t = setTimeout(function () { delete calls[id]; rej(new Error('timeout')); }, fn === 'applyOps' ? 60000 : 40000);
+      calls[id] = { res: res, rej: rej, t: t, at: Date.now() };
       try { bridge.postMessage({ type: 'dr-call', id: id, fn: fn, args: args || [] }, bridgeOrigin); }
       catch (err) { clearTimeout(t); delete calls[id]; rej(err); }
     });
@@ -252,10 +252,19 @@
   });
   window.addEventListener('online', function () { updatePill(); if (bridge) flush(); else startBridge(); });
   window.addEventListener('offline', updatePill);
+  // 手機把 App 放到背景時，正在跑的同步可能就此卡住（一直顯示「同步中」）。回到前景時，卡超過 12 秒的就放棄、重新連線再送
+  // （每個變更有 opId，重送不會重複）。順便檢查 App 有沒有新版。
+  function restartBridge() {
+    Object.keys(calls).forEach(function (k) { var c = calls[k]; delete calls[k]; clearTimeout(c.t); c.rej(new Error('stalled')); });
+    startBridge();
+  }
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     render();
-    if (Date.now() - lastSync > 20000) flush();
+    try { if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {}); } catch (e) {}
+    var now = Date.now(), stuck = Object.keys(calls).some(function (k) { return now - calls[k].at > 12000; });
+    if (stuck && navigator.onLine) { restartBridge(); return; }
+    if (now - lastSync > 20000) flush();
   });
   setInterval(function () {
     if (!dragging && !sheet.open) render();
@@ -733,4 +742,6 @@
   render({ bottom: true });
   updatePill();
   if (navigator.onLine) startBridge();
+  window.__drOK = true;                                              // 告訴 index.html 的保險：程式有正常跑起來
+  try { sessionStorage.removeItem('dr.recover'); } catch (e) {}
 })();
