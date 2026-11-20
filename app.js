@@ -349,7 +349,7 @@
     });
   }
 
-  // ---------- 手勢：點＝展開、按住＝編輯、右拉＝完成（已完成頁左拉＝移回）、拖到垃圾桶＝刪除 ----------
+  // ---------- 手勢：點＝展開、按住＝編輯、右拉＝完成（已完成頁左拉＝移回）、反方向＝換頁、按住後拖到垃圾桶＝刪除 ----------
   var TR = $('tr'), dragging = false;
   function overTrash(x, y) { var r = TR.getBoundingClientRect(); return x > r.left - 28 && x < r.right + 28 && y > r.top - 28 && y < r.bottom + 28; }
   function collapse(w, cb) { w.style.height = w.offsetHeight + 'px'; void w.offsetHeight; w.style.height = '0px'; w.style.marginBottom = '0px'; setTimeout(cb, 280); }
@@ -379,11 +379,12 @@
       if (!s.mv) {
         if (dist <= (s.lg ? 10 : 12)) return;
         if (s.touch && !s.lg && Math.abs(s.dy) > Math.abs(s.dx)) { cancel(); return; }    // 手機上直向滑＝捲動清單
-        if (kind === 'd' && !s.lg && s.dx > 0 && Math.abs(s.dx) >= Math.abs(s.dy)) {      // 已完成頁往右滑＝回待辦
+        // 換頁：待辦卡片往左滑＝打開已完成（往右滑才是完成）；已完成卡片往右滑＝回待辦（往左滑才是移回）
+        if (!s.lg && Math.abs(s.dx) >= Math.abs(s.dy) && s.dx * dir < 0) {
           clearTimeout(s.tm);
           d.classList.remove('press');
           s.page = true; s.mv = true;
-          pageBegin(s.x, false); pageMove(e.clientX);
+          pageBegin(s.x, kind === 'a'); pageMove(e.clientX);
           return;
         }
         s.mv = true; dragging = true;
@@ -456,9 +457,9 @@
     openId = was ? null : id;
   }
 
-  // ---------- 換頁：待辦頁從右邊緣往左滑＝已完成；已完成頁任何地方往右滑＝回待辦（手機的返回鍵也會回待辦）----------
+  // ---------- 換頁：待辦頁任何地方往左滑＝已完成；已完成頁任何地方往右滑＝回待辦（手機的返回鍵也會回待辦）----------
   var APP = $('app'), PM = $('pm'), PD = $('pd');
-  var pager = { on: false, opening: false, x0: 0, dx: 0, v: 0, lx: 0, lt: 0, W: 1 };
+  var pager = { on: false, opening: false, x0: 0, dx: 0, v: 0, lx: 0, lt: 0, W: 1, endAt: 0 };
   function clamp01(n) { return Math.min(1, Math.max(0, n)); }
   function pageBegin(x, opening) {
     pager.on = true; pager.opening = opening; pager.x0 = pager.lx = x; pager.dx = 0; pager.v = 0;
@@ -475,7 +476,7 @@
   }
   function pageEnd() {
     if (!pager.on) return;
-    pager.on = false;
+    pager.on = false; pager.endAt = performance.now();
     var prog = pager.opening ? Math.max(0, -pager.dx / pager.W) : Math.max(0, 1 - pager.dx / pager.W);
     var open = pager.opening ? (prog > 0.33 || pager.v < -0.5) : !(prog < 0.67 || pager.v > 0.5);
     APP.classList.remove('nodrag');
@@ -496,36 +497,29 @@
     if (sheet.open) { closeSheet(false, false, true); return; }
     setDone(!!(history.state && history.state.page === 'done'), true);
   });
-  (function rightEdge() {                       // 待辦頁：只有最右邊緣
-    var z = $('er'), on = false;
-    z.addEventListener('pointerdown', function (e) {
-      if (e.button) return;
-      try { z.setPointerCapture(e.pointerId); } catch (x) {}
-      on = true; pageBegin(e.clientX, true);
-    });
-    z.addEventListener('pointermove', function (e) { if (on) pageMove(e.clientX); });
-    ['pointerup', 'pointercancel'].forEach(function (t) { z.addEventListener(t, function () { if (on) { on = false; pageEnd(); } }); });
-  })();
-  (function donePageSwipe() {                   // 已完成頁：空白處、選項區也能往右滑回去（卡片上的往右滑在 gesture() 裡處理）
+  // 空白處、分隔標籤、輸入列、選項區的換頁手勢（卡片上的在 gesture() 裡處理）
+  function swipeArea(P, opening) {
     var c = null;
-    PD.addEventListener('pointerdown', function (e) {
+    P.addEventListener('pointerdown', function (e) {
       if (e.button || e.target.closest('.cd, input, textarea')) { c = null; return; }
       c = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false };
     });
-    PD.addEventListener('pointermove', function (e) {
+    P.addEventListener('pointermove', function (e) {
       if (!c) return;
       var dx = e.clientX - c.x, dy = e.clientY - c.y;
       if (!c.on) {
         if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-        if (Math.abs(dy) > Math.abs(dx) || dx < 0) { c = null; return; }
+        if (Math.abs(dy) > Math.abs(dx) || (opening ? dx > 0 : dx < 0)) { c = null; return; }
         c.on = true;
-        try { PD.setPointerCapture(c.id); } catch (x) {}
-        pageBegin(c.x, false);
+        try { P.setPointerCapture(c.id); } catch (x) {}
+        pageBegin(c.x, opening);
       }
       pageMove(e.clientX);
     });
-    ['pointerup', 'pointercancel'].forEach(function (t) { PD.addEventListener(t, function () { if (c && c.on) pageEnd(); c = null; }); });
-  })();
+    ['pointerup', 'pointercancel'].forEach(function (t) { P.addEventListener(t, function () { if (c && c.on) pageEnd(); c = null; }); });
+  }
+  swipeArea(PM, true);                          // 待辦頁：任何地方往左滑＝打開已完成
+  swipeArea(PD, false);                         // 已完成頁：任何地方往右滑＝回待辦
 
   // ---------- 新增／編輯面板 ----------
   var SH = $('sh'), BD = $('bd'), OK = $('ok');
@@ -605,7 +599,7 @@
     }
     push({ type: 'update', id: sheet.id, data: f }, 300);
   }
-  $('cp').addEventListener('click', function () { openSheet('add'); });
+  $('cp').addEventListener('click', function () { if (performance.now() - pager.endAt > 400) openSheet('add'); });   // 剛在輸入列上滑動換頁時不打開
   BD.addEventListener('click', function () { closeSheet(false); });
   OK.addEventListener('click', function () { if (!OK.classList.contains('off')) closeSheet(true); });
   ['ft', 'fnote', 'fa', 'fe'].forEach(function (k) { $(k).addEventListener('input', validity); });

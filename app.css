@@ -48,9 +48,6 @@ svg .fill { fill: currentColor; stroke: none; }
 #app.dopen #pd { translate: 0 0; }
 #app.nodrag .pg { transition: none; }
 .pg { touch-action: pan-y; }
-.edge { position: absolute; top: 0; bottom: 0; width: 24px; touch-action: none; z-index: 22; }
-#er { right: 0; }
-#app.dopen #er { display: none; }
 
 .list { margin-top: auto; padding: 4px 0 12px; max-width: 640px; width: 100%; margin-left: auto; margin-right: auto; }
 #dl.list { margin-top: 0; padding-top: 14px; }
