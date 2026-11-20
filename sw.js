@@ -1,8 +1,8 @@
 // App 本體（頁面、程式、樣式、圖示）整包裝在有版本號的快取裡，一律先用快取，開啟不用等網路。
 // 新版只在這個檔案的版本號變了時才整包下載，下載完整才換上，所以頁面和程式一定是同一版，不會半新半舊。
 // 資料不經過這裡（資料存在 localStorage，同步走 Google Apps Script）。
-var CACHE = 'deadline-shell-v11';
-var FILES = ['./', 'index.html', 'app.js?v=11', 'app.css?v=11', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
+var CACHE = 'deadline-shell-v12';
+var FILES = ['./', 'index.html', 'app.js?v=12', 'app.css?v=12', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png'];
 
 self.addEventListener('install', function (e) {

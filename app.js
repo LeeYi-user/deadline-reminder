@@ -18,7 +18,7 @@
       BRIDGE_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
     }
   })();
-  var APP_VERSION = 11;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
+  var APP_VERSION = 12;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
   var KEY_BASE = 'dr.base.v3', KEY_OUT = 'dr.outbox.v3';
   var DEF_AHEAD = 72, DEF_EVERY = 24, MAX_AHEAD = 720;
   var HOUR = 3600000, DAY = 24 * HOUR;
@@ -731,7 +731,7 @@
   }
   unitToggle('ua', 'fa', 'ua');
   unitToggle('ue', 'fe', 'ue');
-  /* 面板上方（灰色橫條一直到標題、說明那一列）：往上拉＝把面板拉高（說明欄跟著變大，可以寫長一點），
+  /* 整個面板（灰色橫條、標題、說明、日期、提醒設定、下面的空白）：往上拉＝把面板拉高（內容跟著上緣，說明寫長了可以往下長），
      往下拉＝縮回原本大小，再往下＝關掉。在標題／說明上輕點還是照常輸入，拖超過一點點才算拉面板。 */
   var sizeTimer = null;
   function resetSheetSize() {                   // 面板回到依內容決定的高度
@@ -741,10 +741,10 @@
     SH.style.height = ''; SH.style.translate = '';
   }
   (function pull() {
-    var z = $('shtop'), p = null;
+    var z = SH, p = null;                         // 整個面板都可以上下拉
     z.addEventListener('pointerdown', function (e) {
       if (e.button || e.target.closest('#ok')) return;
-      if (e.pointerType === 'mouse' && e.target.closest('textarea')) return;   // 滑鼠在說明欄裡拖＝選字
+      if (e.pointerType === 'mouse' && e.target.closest('textarea, input.v')) return;   // 滑鼠在說明、數字欄裡拖＝選字
       clearTimeout(sizeTimer);
       var h = SH.offsetHeight, h0 = sheet.big ? sheet.h0 : h;
       p = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false, h: h, h0: h0, max: Math.max(h0, Math.round(APP.clientHeight * 0.92)), dy: 0, pts: [] };

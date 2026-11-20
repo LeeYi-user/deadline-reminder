@@ -119,9 +119,10 @@ svg .fill { fill: currentColor; stroke: none; }
    說明寫長了會往下長到用完這些空間（app.js 的 growNote） */
 .sh.big { height: 92%; }
 .sh.grow #fnote { max-height: none; }
-#shtop { touch-action: none; cursor: grab; }
-#shtop #ft, #shtop #fnote { touch-action: none; }   /* 輸入框自己會捲動，不關掉的話手機上從標題／說明拉面板會被瀏覽器搶走 */
-#shtop #fnote.scroll { touch-action: pan-y; }       /* 說明長到要捲時：上下滑＝捲說明（面板改從灰色橫條或標題拉） */
+/* 整個面板上下拉都可以拉高／縮回／關掉；輸入框自己會捲動，不關掉的話手機上從輸入框拉面板會被瀏覽器搶走 */
+.sh, .sh input, .sh textarea { touch-action: none; }
+#shtop { cursor: grab; }
+.sh #fnote.scroll { touch-action: pan-y; }       /* 說明長到要捲時：在說明欄上下滑＝捲說明（面板從別的地方拉） */
 #shtop input, #shtop textarea { cursor: text; }
 #shtop #ok { cursor: pointer; }
 .gz { position: relative; flex: none; height: 30px; margin: 0 -14px 2px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
