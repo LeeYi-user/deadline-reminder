@@ -77,6 +77,7 @@ svg .fill { fill: currentColor; stroke: none; }
 .cd.flash { animation: flash 1.6s var(--ease); }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
 .st { position: absolute; left: 7px; top: 11px; bottom: 11px; width: 4px; border-radius: 4px; background: var(--x); }
+.cd.n .st { display: none; }   /* 紀錄（沒有截止）：沒有色條 */
 .cd.g .st { background: var(--g); } .cd.y .st { background: var(--y); } .cd.r .st { background: var(--r); }
 .ck { position: absolute; left: -32px; top: 50%; width: 24px; height: 24px; margin-top: -12px; border-radius: 50%; border: 2px solid var(--x);
   display: flex; align-items: center; justify-content: center; color: #fff; opacity: 0; transition: background .18s, border-color .18s; }
@@ -112,6 +113,7 @@ svg .fill { fill: currentColor; stroke: none; }
   background: var(--sheet); border-radius: 22px 22px 0 0; padding: 0 14px max(14px, env(safe-area-inset-bottom));
   translate: 0 105%; transition: translate .42s var(--spring), height .38s var(--nav); z-index: 30; max-height: 92%; }
 .sh.show { translate: 0 0; }
+.sh:not(.show) { pointer-events: none; }   /* 收下去的途中不擋點擊（例如存完馬上點輸入列） */
 .sh > .row { flex: none; }
 /* 從上方往上拉：面板拉高，多出來的高度都給說明欄 */
 .sh.big { height: 92%; }
@@ -124,7 +126,8 @@ svg .fill { fill: currentColor; stroke: none; }
 #shtop #fnote.scroll { touch-action: pan-y; }       /* 說明長到要捲時：上下滑＝捲說明（面板改從灰色橫條或標題拉） */
 #shtop input, #shtop textarea { cursor: text; }
 #shtop #ok { cursor: pointer; }
-.gz { flex: none; height: 30px; margin: 0 -14px 2px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.gz { position: relative; flex: none; height: 30px; margin: 0 -14px 2px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.gz::before { content: ""; position: absolute; left: 0; right: 0; top: -24px; height: 24px; }   /* 面板上緣再往上 24px 也抓得到（不會點到外面變成取消） */
 .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--line2); }
 .top { display: flex; gap: 10px; align-items: flex-start; }
 .fields { flex: 1; min-width: 0; }
@@ -144,6 +147,11 @@ svg .fill { fill: currentColor; stroke: none; }
 .row.dt .dv { flex: 1; font-size: 17px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .row.dt .dv.ph { color: var(--text3); font-weight: 400; font-size: 15px; }
 .row.dt .sf2 { color: var(--text2); }
+.clr { position: relative; z-index: 2; flex: none; width: 30px; height: 30px; margin-right: -6px; border-radius: 50%; background: var(--pill); color: var(--text2);
+  display: flex; align-items: center; justify-content: center; }
+.clr svg { width: 15px; height: 15px; stroke-width: 2.2; }
+/* 沒有截止＝單純紀錄：不顯示提醒設定和清除鈕 */
+.sh.nodl .row.rem, .sh.nodl .clr, .sh.nodl .row.dt .sf2 { display: none; }
 #fd { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; margin: 0; cursor: pointer; }
 .row .lb { display: flex; align-items: center; gap: 10px; padding: 0 0 0 14px; color: var(--text2); }
 .row .v { flex: 1; min-width: 40px; width: 100%; border: 0; outline: none; background: transparent; color: var(--text); font: inherit;
@@ -162,7 +170,7 @@ svg .fill { fill: currentColor; stroke: none; }
 /* 復原提示：蓋在最下面的輸入列上（在垃圾桶下方，不擋垃圾桶；單手拇指也按得到右邊的「復原」） */
 .toast { position: absolute; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); width: min(640px, calc(100% - 20px)); min-height: 49px; translate: -50% 14px;
   background: var(--toast); color: var(--on-toast); border-radius: 22px; padding: 4px 4px 4px 16px; font-size: 14px; display: flex; justify-content: space-between;
-  align-items: center; gap: 10px; opacity: 0; pointer-events: none; transition: opacity .22s var(--ease), translate .3s var(--spring); z-index: 45; }
+  align-items: center; gap: 10px; opacity: 0; pointer-events: none; transition: opacity .22s var(--ease), translate .3s var(--spring); z-index: 45; touch-action: none; }
 .toast.show { opacity: 1; translate: -50% 0; pointer-events: auto; }
 .toast #tmsg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toast #undo { color: #64d2ff; font-weight: 600; white-space: nowrap; height: 41px; padding: 0 20px; border-radius: 999px; background: rgba(100, 210, 255, .16); flex: none; }

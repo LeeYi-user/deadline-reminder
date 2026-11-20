@@ -18,6 +18,7 @@
       BRIDGE_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
     }
   })();
+  var APP_VERSION = 10;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
   var KEY_BASE = 'dr.base.v3', KEY_OUT = 'dr.outbox.v3';
   var DEF_AHEAD = 72, DEF_EVERY = 24, MAX_AHEAD = 720;
   var HOUR = 3600000, DAY = 24 * HOUR;
@@ -43,6 +44,7 @@
   }
   /** 分組標籤和顏色：今天／明天＝紅，本週・下週＝黃，再之後＝綠，逾期＝灰（一週從週一算） */
   function bucket(deadline, now) {
+    if (!deadline) return { key: 'rec', label: '紀錄', c: 'n' };          // 沒有截止＝單純紀錄
     if (deadline <= now) return { key: 'late', label: '已逾期', c: 'x' };
     var today = dayStart(now), d = dayStart(deadline);
     var monday = addDays(today, -((new Date(today).getDay() + 6) % 7));
@@ -72,12 +74,13 @@
 
   function idx(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return i; return -1; }
   function applyLocal(a, d, op) {
-    if (op.type === 'add') { a.push(Object.assign({ id: op.tmp, done: false, doneAt: 0 }, op.data)); return; }
+    if (op.type === 'add') { a.push(Object.assign({ id: op.tmp, done: false, doneAt: 0, at: op.data.deadline ? 0 : op.at }, op.data)); return; }
     var i = idx(a, op.id), j = idx(d, op.id), it;
     if (op.type === 'update') {
       it = i >= 0 ? a[i] : (j >= 0 ? d.splice(j, 1)[0] : null);
       if (!it) return;
       Object.assign(it, op.data, { done: false, doneAt: 0 });
+      if (!it.deadline && !it.at) it.at = op.at;
       if (i < 0) a.push(it);
     } else if (op.type === 'complete' && i >= 0) {
       it = a.splice(i, 1)[0]; it.done = true; it.doneAt = op.at; d.push(it);
@@ -90,10 +93,11 @@
   function view() {
     var a = base ? clone(base.items) : [], d = base ? clone(base.done) : [];
     outbox.forEach(function (op) { applyLocal(a, d, op); });
-    a.sort(function (x, y) { return y.deadline - x.deadline; });            // 遠的在上，近的在下
+    a.sort(function (x, y) { return sortKey(y) - sortKey(x); });           // 遠的在上，近的在下；紀錄（沒有截止）在最上面
     d.sort(function (x, y) { return (y.doneAt || y.deadline) - (x.doneAt || x.deadline); });
     return { a: a, d: d };
   }
+  function sortKey(it) { return it.deadline || 9e15 - (it.at || 0); }      // 紀錄之間：新的在下面
   function findItem(id) {
     var v = view(), i = idx(v.a, id);
     if (i >= 0) return { it: v.a[i], kind: 'a' };
@@ -315,24 +319,72 @@
       '<div class="l1"><span class="t"></span>' + (it.note ? ICON_NOTE : '') + '<span class="sp"></span></div>' + (it.note ? '<div class="nt"></div>' : '');
     d.querySelector('.t').textContent = it.title;
     if (it.note) d.querySelector('.nt').textContent = it.note;
-    var right = kind === 'd' ? el('span', 'dtm', it.doneAt ? md(it.doneAt) + hm(it.doneAt) : '') : (b.c === 'r' ? el('span', 'h', hoursLeft(it.deadline, now)) : null);
+    var right = kind === 'd' ? el('span', 'dtm', it.doneAt ? md(it.doneAt) + hm(it.doneAt) : '')
+      : b.c === 'r' ? el('span', 'h', hoursLeft(it.deadline, now))
+      : b.c === 'n' && it.at ? el('span', 'dtm', md(it.at)) : null;
     if (right) d.querySelector('.l1').appendChild(right);
     w.appendChild(d);
     gesture(w, d, it.id, kind);
     return w;
   }
 
-  // ---------- 提示（含復原）----------
+  // ---------- 提示（含復原）：幾秒後自己消失，也可以往左右或往下滑掉 ----------
   var toastTimer = null, undoFn = null, undoOps = [];
+  function hideToast() { $('toast').classList.remove('show'); undoFn = null; }
   function toast(msg, onUndo) {
     var t = $('toast');
+    t.style.transition = ''; t.style.translate = ''; t.style.opacity = '';
     $('tmsg').textContent = msg;
     t.classList.toggle('noundo', !onUndo);
     t.classList.add('show');
     undoFn = onUndo || null;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove('show'); undoFn = null; }, onUndo ? 4500 : 2500);
+    toastTimer = setTimeout(hideToast, onUndo ? 4500 : 2500);
   }
+  (function swipeToast() {
+    var T = $('toast'), s = null;
+    T.addEventListener('pointerdown', function (e) {
+      if (e.button || !T.classList.contains('show')) return;
+      s = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false, dx: 0, dy: 0, pts: [] };
+    });
+    T.addEventListener('pointermove', function (e) {
+      if (!s) return;
+      var dx = e.clientX - s.x, dy = e.clientY - s.y, now = performance.now();
+      if (!s.on) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        s.on = true;
+        try { T.setPointerCapture(s.id); } catch (x) {}
+        clearTimeout(toastTimer);
+        T.style.transition = 'none';
+      }
+      s.dx = dx; s.dy = Math.max(0, dy);                    // 往上不動，往左右／往下跟著手指
+      s.pts.push([now, dx, s.dy]);
+      while (s.pts.length > 2 && now - s.pts[0][0] > 100) s.pts.shift();
+      T.style.translate = 'calc(-50% + ' + dx + 'px) ' + s.dy + 'px';
+      T.style.opacity = String(Math.max(0, 1 - Math.max(Math.abs(dx) / 220, s.dy / 70)));
+    });
+    function end() {
+      if (!s) return;
+      var q = s; s = null;
+      if (!q.on) return;                                     // 沒有拖＝一般的點（「復原」照常）
+      var now = performance.now(), a = q.pts[0], b = q.pts[q.pts.length - 1], vx = 0, vy = 0;
+      if (a && now - b[0] < 120) { var dt = Math.max(16, b[0] - a[0]); vx = (b[1] - a[1]) / dt; vy = (b[2] - a[2]) / dt; }
+      var side = Math.abs(q.dx) > 70 || (Math.abs(vx) > 0.2 && vx * q.dx > 0), down = q.dy > 24 || vy > 0.2;
+      T.style.transition = '';
+      if (side || down) {
+        T.style.translate = side ? 'calc(-50% + ' + (q.dx > 0 ? 1 : -1) * (T.offsetWidth + 40) + 'px) ' + q.dy + 'px' : '-50% 90px';
+        T.style.opacity = '0';
+        undoFn = null;
+        scheduleFlush(300);                                  // 不復原了：變更可以馬上送出
+        setTimeout(function () { hideToast(); T.style.transition = 'none'; T.style.translate = ''; T.style.opacity = ''; void T.offsetHeight; T.style.transition = ''; }, 260);
+      } else {
+        T.style.translate = ''; T.style.opacity = '';
+        toastTimer = setTimeout(hideToast, 2500);
+      }
+    }
+    T.addEventListener('pointerup', end);
+    T.addEventListener('pointercancel', end);
+  })();
   $('undo').addEventListener('click', function () {
     var f = undoFn; undoFn = null;
     $('toast').classList.remove('show');
@@ -358,7 +410,7 @@
     var op = push({ type: 'delete', id: id }, 4800);
     toast('已刪除「' + it.title + '」', function () {
       undo(op, function () {
-        if (it.deadline <= Date.now()) return null;
+        if (it.deadline && it.deadline <= Date.now()) return null;
         return { type: 'add', tmp: 'tmp_' + uid(), data: { title: it.title, note: it.note, deadline: it.deadline, ahead: it.ahead, every: it.every } };
       });
     });
@@ -569,18 +621,26 @@
     };
   }
   function snap(f) { return [f.title, f.note, f.deadline, f.ahead, f.every].join('|'); }
+  // 截止時間可以留空（＝單純紀錄，不提醒）；提前／每隔可以是 0（＝只在截止那一刻提醒）
   function validity() {
-    var f = formData();
-    var ok = !!f.title && f.deadline > 0 && isFinite(f.ahead) && f.ahead >= 0 && f.ahead <= MAX_AHEAD && isFinite(f.every) && f.every >= 1;
-    if (sheet.mode === 'add') ok = ok && f.deadline > Date.now();
-    else ok = ok && snap(f) !== sheet.orig && (Math.floor(f.deadline / 60000) === Math.floor(sheet.orig0 / 60000) || f.deadline > Date.now());
+    var f = formData(), dl = f.deadline > 0;
+    var ok = !!f.title && (!dl || (isFinite(f.ahead) && f.ahead >= 0 && f.ahead <= MAX_AHEAD && isFinite(f.every) && f.every >= 0 && f.every <= MAX_AHEAD));
+    if (sheet.mode === 'add') ok = ok && (!dl || f.deadline > Date.now());
+    else ok = ok && snap(f) !== sheet.orig && (!dl || Math.floor(f.deadline / 60000) === Math.floor(sheet.orig0 / 60000) || f.deadline > Date.now());
     OK.classList.toggle('off', !ok);
+    zeroHints();
     return ok ? f : null;
+  }
+  function zeroHints() {
+    var a = numOf($('fa'), sheet.ua), e = numOf($('fe'), sheet.ue);
+    $('fas').textContent = a === 0 ? '只在截止時' : '開始提醒';
+    $('fes').textContent = e === 0 ? '只在截止時' : '提醒一次';
   }
   function showDate() {
     var dv = $('fdv');
     if (sheet.deadline) { dv.textContent = fullDate(sheet.deadline) + hm(sheet.deadline); dv.classList.remove('ph'); }
-    else { dv.textContent = '選擇日期和時間'; dv.classList.add('ph'); }
+    else { dv.textContent = '沒有截止（單純紀錄）'; dv.classList.add('ph'); }
+    SH.classList.toggle('nodl', !sheet.deadline);
   }
   function growNote() { var t = $('fnote'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; noteScroll(); }
   function noteScroll() { var t = $('fnote'); t.classList.toggle('scroll', t.scrollHeight > t.clientHeight + 1); }   // 說明要捲動時才讓手指捲它
@@ -640,6 +700,11 @@
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (!OK.classList.contains('off')) closeSheet(true); }
   });
   $('fd').addEventListener('click', function () { try { this.showPicker(); } catch (e) {} });
+  $('fdc').addEventListener('click', function (e) {     // ✕：不設截止＝單純紀錄
+    e.preventDefault(); e.stopPropagation();
+    sheet.deadline = 0; $('fd').value = '';
+    showDate(); validity();
+  });
   $('fd').addEventListener('change', function () { sheet.deadline = fromLocalInput(this.value); showDate(); validity(); });
   $('fd').addEventListener('input', function () { sheet.deadline = fromLocalInput(this.value); showDate(); validity(); });
   function unitToggle(btnId, inputId, key) {
@@ -745,9 +810,13 @@
   var defUnits = { a: prefs.ahead >= 24 && prefs.ahead % 24 === 0 && prefs.ahead > 72 ? 'd' : 'h', e: 'h' };
   showNum($('da'), prefs.ahead, defUnits.a); setUnit($('dua'), defUnits.a);
   showNum($('de'), prefs.every, defUnits.e); setUnit($('due'), defUnits.e);
+  if (prefs.ahead === 0) $('das').textContent = '只在截止時';
+  if (prefs.every === 0) $('des').textContent = '只在截止時';
   function saveDefaults() {
     var a = numOf($('da'), defUnits.a), e = numOf($('de'), defUnits.e);
-    var okA = isFinite(a) && a >= 0 && a <= MAX_AHEAD, okE = isFinite(e) && e >= 1 && e <= MAX_AHEAD;
+    var okA = isFinite(a) && a >= 0 && a <= MAX_AHEAD, okE = isFinite(e) && e >= 0 && e <= MAX_AHEAD;
+    $('das').textContent = a === 0 ? '只在截止時' : '開始提醒';
+    $('des').textContent = e === 0 ? '只在截止時' : '提醒一次';
     $('da').closest('.row').classList.toggle('bad', !okA);
     $('de').closest('.row').classList.toggle('bad', !okE);
     if (okA && okE) { prefs = { ahead: a, every: e }; save(KEY_DEF, prefs); }
@@ -766,7 +835,7 @@
     var s = $('syncInfo'); if (!s) return;
     var t = !navigator.onLine ? '離線中' : (busy ? '同步中…' : (lastSync ? '已同步 ' + md(lastSync) + hm(lastSync) : (base && base.at ? '上次同步 ' + md(base.at) + hm(base.at) : '尚未同步')));
     if (outbox.length) t += '・' + outbox.length + ' 項變更待同步';
-    s.textContent = t;
+    s.textContent = t + '・版本 ' + APP_VERSION;
   }
   (function () { var t = ''; try { t = localStorage.getItem(KEY_THEME) || ''; } catch (e) {} applyTheme(t); })();
 
@@ -774,8 +843,14 @@
   if ('serviceWorker' in navigator) {
     // 有新版時：剛打開幾秒內、沒在操作，就直接換成新版（資料在本機，重新載入是瞬間的）
     var hadSW = !!navigator.serviceWorker.controller, t0 = Date.now();
+    var updateReady = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (hadSW && Date.now() - t0 < 10000 && !sheet.open && !dragging && !pager.on) location.reload();
+      if (!hadSW) return;
+      if (Date.now() - t0 < 10000 && !sheet.open && !dragging && !pager.on) location.reload();
+      else updateReady = true;                         // 晚到的新版：下次切到背景時換上，回來就是新版
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (updateReady && document.visibilityState === 'hidden' && !sheet.open) location.reload();
     });
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }
