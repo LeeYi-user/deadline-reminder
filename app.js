@@ -18,7 +18,7 @@
       BRIDGE_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
     }
   })();
-  var APP_VERSION = 12;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
+  var APP_VERSION = 13;                  // 和 index.html／sw.js 的 ?v= 一起加一號（選項頁最下面會顯示）
   var KEY_BASE = 'dr.base.v3', KEY_OUT = 'dr.outbox.v3';
   var DEF_AHEAD = 72, DEF_EVERY = 24, MAX_AHEAD = 720;
   var HOUR = 3600000, DAY = 24 * HOUR;
@@ -79,7 +79,9 @@
     if (op.type === 'update') {
       it = i >= 0 ? a[i] : (j >= 0 ? d.splice(j, 1)[0] : null);
       if (!it) return;
+      var moved = Math.floor((it.deadline || 0) / 60000) !== Math.floor((op.data.deadline || 0) / 60000);
       Object.assign(it, op.data, { done: false, doneAt: 0 });
+      if (moved) it.order = 0;                                           // 換了一天：手動排的順序不適用
       if (!it.deadline && !it.at) it.at = op.at;
       if (i < 0) a.push(it);
     } else if (op.type === 'complete' && i >= 0) {
@@ -88,16 +90,23 @@
       it = d.splice(j, 1)[0]; it.done = false; it.doneAt = 0; a.push(it);
     } else if (op.type === 'delete') {
       if (i >= 0) a.splice(i, 1); else if (j >= 0) d.splice(j, 1);
+    } else if (op.type === 'order') {
+      it = i >= 0 ? a[i] : (j >= 0 ? d[j] : null);
+      if (it) it.order = Number(op.data.order) || 0;
     }
   }
   function view() {
     var a = base ? clone(base.items) : [], d = base ? clone(base.done) : [];
     outbox.forEach(function (op) { applyLocal(a, d, op); });
-    a.sort(function (x, y) { return sortKey(y) - sortKey(x); });           // 遠的在上，近的在下；紀錄（沒有截止）在最上面
+    var now = Date.now();
+    a.sort(function (x, y) { return (groupRank(y, now) - groupRank(x, now)) || (rank(y) - rank(x)); });   // 遠的在上，近的在下；紀錄在最上面
     d.sort(function (x, y) { return (y.doneAt || y.deadline) - (x.doneAt || x.deadline); });
     return { a: a, d: d };
   }
   function sortKey(it) { return it.deadline || 9e15 - (it.at || 0); }      // 紀錄之間：新的在下面
+  // 分組（和畫面上的分隔標籤一致）：紀錄 > 各天（晚的在上）> 已逾期；同一組裡依 rank（手動排過的用 order，否則依時間）
+  function groupRank(it, now) { return !it.deadline ? 9e15 : it.deadline <= now ? -1 : dayStart(it.deadline); }
+  function rank(it) { return it.order || sortKey(it); }
   function findItem(id) {
     var v = view(), i = idx(v.a, id);
     if (i >= 0) return { it: v.a[i], kind: 'a' };
@@ -120,7 +129,15 @@
     var k = outbox.indexOf(op);
     if (k >= 0 && !(inflight && inflight[op.opId])) { outbox.splice(k, 1); save(KEY_OUT, outbox); render(); updatePill(); return; }
     var inv = inverse && inverse();
-    if (inv) push(inv, 400);
+    if (inv) pushMany([].concat(inv), 400);
+  }
+  function pushMany(ops, delay) {
+    if (!ops.length) return;
+    ops.forEach(function (op) { op.opId = uid(); op.at = op.at || Date.now(); outbox.push(op); });
+    save(KEY_OUT, outbox);
+    render();
+    updatePill();
+    scheduleFlush(delay == null ? 400 : delay);
   }
 
   // ---------- 同步（橋）----------
@@ -304,8 +321,8 @@
     $('pd').scrollTop = dtop;
     pullFlags();
   }
-  // 清單已經捲到最上面（或根本不用捲）時標記 .top：這時卡片往下拉不會捲動，可以直接拖（CSS 讓卡片只允許往上滑捲動）
-  function pullFlag(P) { P.classList.toggle('top', P.scrollTop <= 1); }
+  // 清單捲到最上面時標記 .top（往下拉不會捲動＝可以直接拖卡片），捲到最下面時標記 .bot（往上拉同理）；不用捲時兩個都有
+  function pullFlag(P) { P.classList.toggle('top', P.scrollTop <= 1); P.classList.toggle('bot', P.scrollHeight - P.scrollTop - P.clientHeight <= 1); }
   function pullFlags() { pullFlag($('pm')); pullFlag($('pd')); }
   ['pm', 'pd'].forEach(function (k) { $(k).addEventListener('scroll', function () { pullFlag(this); }, { passive: true }); });
   window.addEventListener('resize', pullFlags);
@@ -418,7 +435,7 @@
 
   // ---------- 手勢：點＝展開、按住＝編輯、右拉＝完成（已完成頁左拉＝移回）、反方向＝換頁、往下拉（或按住後拖）到垃圾桶＝刪除 ----------
   var TR = $('tr'), dragging = false;
-  function overTrash(x, y) { var r = TR.getBoundingClientRect(); return x > r.left - 28 && x < r.right + 28 && y > r.top - 28 && y < r.bottom + 28; }
+  function overTrash(x, y) { var r = TR.getBoundingClientRect(); return x > r.left - 28 && x < r.right + 28 && y > r.top - 8 && y < r.bottom + 40; }   // 上緣只多 8px：手指要拖過最後一張卡
   function collapse(w, cb) { w.style.height = w.offsetHeight + 'px'; void w.offsetHeight; w.style.height = '0px'; w.style.marginBottom = '0px'; setTimeout(cb, 280); }
   function gesture(w, d, id, kind) {
     var s = null, dir = kind === 'a' ? 1 : -1;
@@ -428,7 +445,8 @@
       if (e.button || s) return;
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
       s = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
-      s.pull = !s.touch || !!d.closest('.pg.top');                   // 手機上：清單在最上面時，往下拉才是拖卡片（不然是捲動）
+      s.pull = !s.touch || !!d.closest('.pg.top');                   // 手機上：清單捲不上去時，往下拉才是拖卡片（不然是捲動）
+      s.pullUp = !s.touch || !!d.closest('.pg.bot');                 // 往上拉同理
       d.classList.add('press');
       s.tm = setTimeout(function () {
         if (!s || s.mv) return;
@@ -447,10 +465,11 @@
       if (!s.mv) {
         if (dist <= (s.lg ? 10 : 12)) return;
         var ax = Math.abs(s.dx), ay = Math.abs(s.dy);
-        var down = s.dy > 0 && s.dy >= ax * 0.6;                     // 往下拉（偏一點左右也算）＝拖卡片，拖到垃圾桶＝刪除
-        if (s.touch && !s.lg && (down ? !s.pull : ay > ax)) { cancel(); return; }   // 手機上往上滑、或清單還能往上捲時往下滑＝捲動清單
+        // 往上／往下拉（偏一點左右也算）＝拖卡片：拖到別的卡片之間＝調整順序，拖到垃圾桶＝刪除
+        var down = s.dy > 0 && s.dy >= ax * 0.6, up = s.dy < 0 && -s.dy >= ax * 0.6;
+        if (s.touch && !s.lg && ((down && !s.pull) || (up && !s.pullUp))) { cancel(); return; }   // 手機上清單還能往那邊捲＝捲動清單
         // 換頁：待辦卡片往左滑＝打開已完成（往右滑才是完成）；已完成卡片往右滑＝回待辦（往左滑才是移回）
-        if (!s.lg && !down && ax >= ay && s.dx * dir < 0) {
+        if (!s.lg && !down && !up && ax >= ay && s.dx * dir < 0) {
           clearTimeout(s.tm);
           d.classList.remove('press');
           s.page = true; s.mv = true;
@@ -463,6 +482,7 @@
         d.classList.remove('press');
         d.classList.add('drag');
         TR.classList.add('show');
+        if (kind === 'a') startReorder(s, w);
       }
       var hot = overTrash(e.clientX, e.clientY);
       if (hot !== TR.classList.contains('hot')) { TR.classList.toggle('hot', hot); if (hot) buzz(8); }
@@ -472,11 +492,13 @@
       d.style.translate = s.dx + 'px ' + s.dy + 'px';
       d.style.scale = hot ? '.86' : '1';
       d.style.opacity = hot ? .85 : 1;
+      if (s.grp) moveReorder(s, hot || ok);
     });
     function cancel() {
       if (!s) return;
       clearTimeout(s.tm);
       if (s.page) pageEnd();
+      if (s.grp) clearShift(s);
       s = null; dragging = false;
       d.classList.remove('press', 'drag', 'ok');
       d.style.translate = ''; d.style.scale = ''; d.style.opacity = '';
@@ -491,6 +513,13 @@
       var hot = TR.classList.contains('hot');
       d.classList.remove('press', 'drag');
       if (!st.mv && st.lg) return;                                   // 按住後放開：編輯面板留著
+      if (st.grp && (cancelled || hot || st.dx * dir >= st.w * 0.35 || st.to === st.gi)) clearShift(st);
+      if (!cancelled && !hot && st.grp && st.to !== st.gi && st.dx * dir < st.w * 0.35) {   // 放在別的位置＝調整順序
+        dragging = false;
+        TR.classList.remove('show', 'hot');
+        commitReorder(st, id, d);
+        return;
+      }
       if (cancelled || (!hot && st.dx * dir < st.w * 0.35)) {
         dragging = false;
         TR.classList.remove('show', 'hot');
@@ -518,6 +547,56 @@
     }
     d.addEventListener('pointerup', function () { end(false); });
     d.addEventListener('pointercancel', function () { end(true); });
+  }
+  // ---------- 調整順序：同一組（同一天／已逾期／紀錄）裡上下拖，其他卡片讓位；放開後存成每張卡的 order ----------
+  function groupOf(w) {
+    var a = [], x = w;
+    while (x.previousElementSibling && x.previousElementSibling.classList.contains('cw')) x = x.previousElementSibling;
+    for (; x && x.classList.contains('cw'); x = x.nextElementSibling) a.push(x);
+    return a;
+  }
+  function startReorder(s, w) {
+    var g = groupOf(w);
+    if (g.length < 2) return;
+    s.grp = g; s.gi = g.indexOf(w); s.to = s.gi;
+    s.mid = g.map(function (x) { var r = x.getBoundingClientRect(); return r.top + r.height / 2; });
+    s.step = w.offsetHeight + (parseFloat(getComputedStyle(w).marginBottom) || 0);
+  }
+  function moveReorder(s, frozen) {
+    var cy = s.mid[s.gi] + s.dy, to = 0;
+    for (var j = 0; j < s.grp.length; j++) if (j !== s.gi && s.mid[j] < cy) to++;
+    if (frozen) to = s.gi;                         // 在垃圾桶上或正要完成：不讓位
+    if (to === s.to) return;
+    s.to = to;
+    s.grp.forEach(function (x, j) {
+      var sh = 0;
+      if (j !== s.gi) { if (s.gi < to && j > s.gi && j <= to) sh = -s.step; else if (to < s.gi && j >= to && j < s.gi) sh = s.step; }
+      x.style.translate = sh ? '0 ' + sh + 'px' : '';
+    });
+    buzz(6);
+  }
+  function clearShift(s) { s.grp.forEach(function (x) { x.style.translate = ''; }); }
+  function commitReorder(st, id, d) {
+    var ids = st.grp.map(function (x) { return x.querySelector('.cd').getAttribute('data-id'); });
+    ids.splice(st.gi, 1); ids.splice(st.to, 0, id);
+    var v = view(), byId = {};
+    v.a.forEach(function (it) { byId[it.id] = it; });
+    var ranks = ids.map(function (k) { return byId[k] ? rank(byId[k]) : 0; }).sort(function (a, b) { return b - a; });   // 同一組原本的排序值，由大到小
+    var ops = [], prev = Infinity;
+    ids.forEach(function (k, i) {
+      var r = Math.min(ranks[i], prev - 1); prev = r;                   // 依新的順序重新分配；一樣的值往下錯開 1
+      var it = byId[k];
+      if (it && rank(it) !== r) ops.push({ type: 'order', id: k, data: { order: r } });
+    });
+    var from = d.getBoundingClientRect();
+    clearShift(st);
+    pushMany(ops, 1200);
+    var nd = document.querySelector('#list .cd[data-id="' + id + '"]');
+    if (nd) {                                     // 從放開的位置滑進新的位置
+      var to = nd.getBoundingClientRect();
+      nd.style.transition = 'none'; nd.style.translate = (from.left - to.left) + 'px ' + (from.top - to.top) + 'px';
+      void nd.offsetHeight; nd.style.transition = ''; nd.style.translate = '';
+    }
   }
   function toggleOpen(id, d) {
     if (!d.querySelector('.nt')) return;
@@ -700,7 +779,18 @@
       if (c) { c.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); c.classList.add('flash'); }
       return;
     }
-    push({ type: 'update', id: sheet.id, data: f }, 300);
+    var before = findItem(sheet.id), ref = { id: sheet.id };
+    undoOps.push(ref);
+    var op = push({ type: 'update', id: sheet.id, data: f }, 4800);
+    toast('已更新「' + f.title + '」', function () {
+      undo(op, function () {                    // 已經送出了：把舊的內容改回去（原本在已完成的，改回去後再標成完成）
+        if (!before) return null;
+        var o = before.it, inv = [{ type: 'update', id: ref.id, undo: true, data: { title: o.title, note: o.note, deadline: o.deadline, ahead: o.ahead, every: o.every } }];
+        if (o.order) inv.push({ type: 'order', id: ref.id, data: { order: o.order } });
+        if (before.kind === 'd') inv.push({ type: 'complete', id: ref.id });
+        return inv;
+      });
+    });
   }
   $('cp').addEventListener('click', function () { if (performance.now() - pager.endAt > 400) openSheet('add'); });   // 剛在輸入列上滑動換頁時不打開
   BD.addEventListener('click', function () { closeSheet(false); });
