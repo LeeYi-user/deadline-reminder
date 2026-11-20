@@ -289,7 +289,13 @@
     if (!v.d.length) dl.appendChild(el('div', 'empty', base ? '還沒有完成的項目' : '載入中…'));
     v.d.forEach(function (it) { dl.appendChild(card(it, 'd', null, now)); });
     $('pd').scrollTop = dtop;
+    pullFlags();
   }
+  // 清單已經捲到最上面（或根本不用捲）時標記 .top：這時卡片往下拉不會捲動，可以直接拖（CSS 讓卡片只允許往上滑捲動）
+  function pullFlag(P) { P.classList.toggle('top', P.scrollTop <= 1); }
+  function pullFlags() { pullFlag($('pm')); pullFlag($('pd')); }
+  ['pm', 'pd'].forEach(function (k) { $(k).addEventListener('scroll', function () { pullFlag(this); }, { passive: true }); });
+  window.addEventListener('resize', pullFlags);
   function card(it, kind, b, now) {
     var w = el('div', 'cw');
     var d = el('div', 'cd ' + (kind === 'd' ? 'done' : b.c));
@@ -349,7 +355,7 @@
     });
   }
 
-  // ---------- 手勢：點＝展開、按住＝編輯、右拉＝完成（已完成頁左拉＝移回）、反方向＝換頁、按住後拖到垃圾桶＝刪除 ----------
+  // ---------- 手勢：點＝展開、按住＝編輯、右拉＝完成（已完成頁左拉＝移回）、反方向＝換頁、往下拉（或按住後拖）到垃圾桶＝刪除 ----------
   var TR = $('tr'), dragging = false;
   function overTrash(x, y) { var r = TR.getBoundingClientRect(); return x > r.left - 28 && x < r.right + 28 && y > r.top - 28 && y < r.bottom + 28; }
   function collapse(w, cb) { w.style.height = w.offsetHeight + 'px'; void w.offsetHeight; w.style.height = '0px'; w.style.marginBottom = '0px'; setTimeout(cb, 280); }
@@ -361,6 +367,7 @@
       if (e.button || s) return;
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
       s = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
+      s.pull = !s.touch || !!d.closest('.pg.top');                   // 手機上：清單在最上面時，往下拉才是拖卡片（不然是捲動）
       d.classList.add('press');
       s.tm = setTimeout(function () {
         if (!s || s.mv) return;
@@ -378,9 +385,11 @@
       var dist = Math.sqrt(s.dx * s.dx + s.dy * s.dy);
       if (!s.mv) {
         if (dist <= (s.lg ? 10 : 12)) return;
-        if (s.touch && !s.lg && Math.abs(s.dy) > Math.abs(s.dx)) { cancel(); return; }    // 手機上直向滑＝捲動清單
+        var ax = Math.abs(s.dx), ay = Math.abs(s.dy);
+        var down = s.dy > 0 && s.dy >= ax * 0.6;                     // 往下拉（偏一點左右也算）＝拖卡片，拖到垃圾桶＝刪除
+        if (s.touch && !s.lg && (down ? !s.pull : ay > ax)) { cancel(); return; }   // 手機上往上滑、或清單還能往上捲時往下滑＝捲動清單
         // 換頁：待辦卡片往左滑＝打開已完成（往右滑才是完成）；已完成卡片往右滑＝回待辦（往左滑才是移回）
-        if (!s.lg && Math.abs(s.dx) >= Math.abs(s.dy) && s.dx * dir < 0) {
+        if (!s.lg && !down && ax >= ay && s.dx * dir < 0) {
           clearTimeout(s.tm);
           d.classList.remove('press');
           s.page = true; s.mv = true;

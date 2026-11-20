@@ -70,6 +70,7 @@ svg .fill { fill: currentColor; stroke: none; }
 .cw { margin-bottom: 6px; transition: height .28s var(--ease), margin .28s var(--ease); }
 .cd { position: relative; background: var(--card); border-radius: 16px; padding: 11px 13px 11px 19px; touch-action: pan-y;
   translate: 0 0; scale: 1; transition: translate .42s var(--spring), scale .3s var(--spring), opacity .25s var(--ease), box-shadow .25s var(--ease); }
+.pg.top .cd { touch-action: pan-down; }   /* 清單在最上面時：卡片往下拉＝拖去垃圾桶，往上滑仍可捲動 */
 .cd.press { scale: .965; transition: scale .5s cubic-bezier(.3, 0, .25, 1), translate .42s var(--spring); }
 .cd.drag { z-index: 50; transition: scale .22s var(--ease), opacity .22s var(--ease), box-shadow .25s var(--ease); box-shadow: 0 6px 18px rgba(0, 0, 0, .14); }
 .cd.edit { box-shadow: 0 0 0 2px var(--accent); }
