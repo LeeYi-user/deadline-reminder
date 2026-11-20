@@ -366,7 +366,7 @@
     d.addEventListener('pointerdown', function (e) {
       if (e.button || s) return;
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
-      s = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
+      s = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
       s.pull = !s.touch || !!d.closest('.pg.top');                   // 手機上：清單在最上面時，往下拉才是拖卡片（不然是捲動）
       d.classList.add('press');
       s.tm = setTimeout(function () {
@@ -393,7 +393,7 @@
           clearTimeout(s.tm);
           d.classList.remove('press');
           s.page = true; s.mv = true;
-          pageBegin(s.x, kind === 'a'); pageMove(e.clientX);
+          pageBegin(s.x, kind === 'a', s.t); pageMove(e.clientX);
           return;
         }
         s.mv = true; dragging = true;
@@ -468,30 +468,39 @@
 
   // ---------- 換頁：待辦頁任何地方往左滑＝已完成；已完成頁任何地方往右滑＝回待辦（手機的返回鍵也會回待辦）----------
   var APP = $('app'), PM = $('pm'), PD = $('pd');
-  var pager = { on: false, opening: false, x0: 0, dx: 0, v: 0, lx: 0, lt: 0, W: 1, endAt: 0 };
+  var pager = { on: false, opening: false, x0: 0, dx: 0, W: 1, endAt: 0, pts: [], tm: 0 };
   function clamp01(n) { return Math.min(1, Math.max(0, n)); }
-  function pageBegin(x, opening) {
-    pager.on = true; pager.opening = opening; pager.x0 = pager.lx = x; pager.dx = 0; pager.v = 0;
-    pager.lt = performance.now(); pager.W = APP.offsetWidth || 1;
+  function pageBegin(x, opening, t) {            // x, t＝手指按下的位置和時間（算甩的速度用）
+    pager.on = true; pager.opening = opening; pager.x0 = x; pager.dx = 0;
+    pager.pts = [[t || performance.now(), x]]; pager.W = APP.offsetWidth || 1;
     APP.classList.add('nodrag');
   }
   function pageMove(x) {
     if (!pager.on) return;
-    var now = performance.now();
-    pager.dx = x - pager.x0; pager.v = (x - pager.lx) / Math.max(1, now - pager.lt); pager.lx = x; pager.lt = now;
+    var now = performance.now(), p = pager.pts;
+    pager.dx = x - pager.x0;
+    p.push([now, x]);
+    while (p.length > 2 && now - p[0][0] > 100) p.shift();       // 只用最近 0.1 秒算速度
     var prog = pager.opening ? clamp01(-pager.dx / pager.W) : clamp01(1 - pager.dx / pager.W);
     PD.style.translate = ((1 - prog) * 100) + '% 0';
     PM.style.translate = (-28 * prog) + '% 0';
   }
+  // 放開時：往換頁方向輕輕一甩（≥ 每秒 150px）就換過去；沒甩的話，拖過四分之一寬也換；往回甩＝取消
   function pageEnd() {
     if (!pager.on) return;
-    pager.on = false; pager.endAt = performance.now();
-    var prog = pager.opening ? Math.max(0, -pager.dx / pager.W) : Math.max(0, 1 - pager.dx / pager.W);
-    var open = pager.opening ? (prog > 0.33 || pager.v < -0.5) : !(prog < 0.67 || pager.v > 0.5);
+    pager.on = false;
+    var now = pager.endAt = performance.now(), p = pager.pts, a = p[0], z = p[p.length - 1];
+    var v = now - z[0] > 120 ? 0 : (z[1] - a[1]) / Math.max(16, z[0] - a[0]);   // px/ms；放開前停住就不算甩
+    var sign = pager.opening ? -1 : 1, along = pager.dx * sign, vs = v * sign;
+    var flick = Math.abs(vs) >= 0.15;
+    var go = flick ? vs > 0 : along > pager.W * 0.25;
+    var dur = flick && go ? 230 : 300;                               // 甩過去的比較快
+    APP.style.setProperty('--navd', dur + 'ms');
+    clearTimeout(pager.tm); pager.tm = setTimeout(function () { APP.style.removeProperty('--navd'); }, dur + 80);
     APP.classList.remove('nodrag');
     void APP.offsetHeight;
     PD.style.translate = ''; PM.style.translate = '';
-    setDone(open);
+    setDone(pager.opening ? go : !go);
   }
   function setDone(open, fromHistory) {
     if (open === APP.classList.contains('dopen')) return;
@@ -511,7 +520,7 @@
     var c = null;
     P.addEventListener('pointerdown', function (e) {
       if (e.button || e.target.closest('.cd, input, textarea')) { c = null; return; }
-      c = { x: e.clientX, y: e.clientY, id: e.pointerId, on: false };
+      c = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, on: false };
     });
     P.addEventListener('pointermove', function (e) {
       if (!c) return;
@@ -521,7 +530,7 @@
         if (Math.abs(dy) > Math.abs(dx) || (opening ? dx > 0 : dx < 0)) { c = null; return; }
         c.on = true;
         try { P.setPointerCapture(c.id); } catch (x) {}
-        pageBegin(c.x, opening);
+        pageBegin(c.x, opening, c.t);
       }
       pageMove(e.clientX);
     });

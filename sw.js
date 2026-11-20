@@ -1,7 +1,7 @@
 // App 本體（頁面、程式、圖示）先從快取拿，開啟幾乎不用等；同時在背景向網路要新版，下次開就是新版。
 // 資料不經過這裡（資料存在 localStorage，同步走 Google Apps Script）。
-var CACHE = 'deadline-shell-v6';
-var FILES = ['./', 'index.html', 'app.js?v=6', 'app.css?v=6', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
+var CACHE = 'deadline-shell-v7';
+var FILES = ['./', 'index.html', 'app.js?v=7', 'app.css?v=7', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png'];
 
 self.addEventListener('install', function (e) {
