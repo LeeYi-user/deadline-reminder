@@ -434,7 +434,7 @@
   var TR = $('tr'), dragging = false;
   function overTrash(x, y) { var r = TR.getBoundingClientRect(); return x > r.left - 28 && x < r.right + 28 && y > r.top - 8 && y < r.bottom + 40; }   // 上緣只多 8px：手指要拖過最後一張卡
   function collapse(w, cb) { w.style.height = w.offsetHeight + 'px'; void w.offsetHeight; w.style.height = '0px'; w.style.marginBottom = '0px'; setTimeout(cb, 280); }
-  var HOLD_MS = 220;
+  var HOLD_MS = 100;                            // 手機上按住多久卡片就壓下去、可以上下拖
   function gesture(w, d, id, kind) {
     var s = null, dir = kind === 'a' ? 1 : -1;
     d.addEventListener('contextmenu', function (e) { e.preventDefault(); });
@@ -443,10 +443,10 @@
       if (e.button || s) return;
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
       s = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
-      // 手機上：直接上下滑＝捲動清單；先按住一下（約 0.22 秒，卡片浮起來，還沒到 0.5 秒的震動編輯）再上下拖＝拖卡片
+      // 手機上：直接上下滑＝捲動清單；按住一下（約 0.1 秒，卡片一壓下去）就可以上下拖＝拖卡片；0.5 秒震動＝編輯
       s.held = !s.touch; s.far = 0;
-      if (s.touch) s.rt = setTimeout(function () { if (s && !s.mv && s.far < 8) { s.held = true; d.classList.add('ready'); } }, HOLD_MS);   // 手指要幾乎不動才算按住（慢慢滑不算）
-      d.classList.add('press');
+      if (s.touch) s.rt = setTimeout(function () { if (s && !s.mv && s.far < 8) { s.held = true; d.classList.add('press', 'ready'); } }, HOLD_MS);   // 手指幾乎不動才算按住；壓下去的動畫一出現就能拖
+      else d.classList.add('press');
       s.tm = setTimeout(function () {
         if (!s || s.mv) return;
         s.lg = true;
