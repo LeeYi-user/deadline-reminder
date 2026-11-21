@@ -274,6 +274,9 @@
   window.addEventListener('offline', updatePill);
   // 手機把 App 放到背景時，正在跑的同步可能就此卡住（一直顯示「同步中」）。回到前景時，卡超過 12 秒的就放棄、重新連線再送
   // （每個變更有 opId，重送不會重複）。順便檢查 App 有沒有新版。
+  function ensureCache() {                     // 請 sw.js 檢查離線用的 App 本體快取還在不在，不在就補回來
+    try { if (navigator.serviceWorker) navigator.serviceWorker.ready.then(function (r) { if (r.active) r.active.postMessage('ensure-cache'); }).catch(function () {}); } catch (e) {}
+  }
   function restartBridge() {
     Object.keys(calls).forEach(function (k) { var c = calls[k]; delete calls[k]; clearTimeout(c.t); c.rej(new Error('stalled')); });
     startBridge();
@@ -282,6 +285,7 @@
     if (document.visibilityState !== 'visible') return;
     render();
     try { if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {}); } catch (e) {}
+    ensureCache();
     var now = Date.now(), stuck = Object.keys(calls).some(function (k) { return now - calls[k].at > 12000; });
     if (stuck && navigator.onLine) { restartBridge(); return; }
     if (now - lastSync > 20000) flush();
@@ -318,13 +322,7 @@
     if (!v.d.length) dl.appendChild(el('div', 'empty', base ? '還沒有完成的項目' : '載入中…'));
     v.d.forEach(function (it) { dl.appendChild(card(it, 'd', null, now)); });
     $('pd').scrollTop = dtop;
-    pullFlags();
   }
-  // 清單捲到最上面時標記 .top（往下拉不會捲動＝可以直接拖卡片），捲到最下面時標記 .bot（往上拉同理）；不用捲時兩個都有
-  function pullFlag(P) { P.classList.toggle('top', P.scrollTop <= 1); P.classList.toggle('bot', P.scrollHeight - P.scrollTop - P.clientHeight <= 1); }
-  function pullFlags() { pullFlag($('pm')); pullFlag($('pd')); }
-  ['pm', 'pd'].forEach(function (k) { $(k).addEventListener('scroll', function () { pullFlag(this); }, { passive: true }); });
-  window.addEventListener('resize', pullFlags);
   function card(it, kind, b, now) {
     var w = el('div', 'cw');
     var d = el('div', 'cd ' + (kind === 'd' ? 'done' : b.c));
@@ -436,21 +434,23 @@
   var TR = $('tr'), dragging = false;
   function overTrash(x, y) { var r = TR.getBoundingClientRect(); return x > r.left - 28 && x < r.right + 28 && y > r.top - 8 && y < r.bottom + 40; }   // 上緣只多 8px：手指要拖過最後一張卡
   function collapse(w, cb) { w.style.height = w.offsetHeight + 'px'; void w.offsetHeight; w.style.height = '0px'; w.style.marginBottom = '0px'; setTimeout(cb, 280); }
+  var HOLD_MS = 220;
   function gesture(w, d, id, kind) {
     var s = null, dir = kind === 'a' ? 1 : -1;
     d.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    d.addEventListener('touchmove', function (e) { if (s && (s.lg || s.mv)) e.preventDefault(); }, { passive: false });
+    d.addEventListener('touchmove', function (e) { if (s && (s.lg || s.mv || s.held)) e.preventDefault(); }, { passive: false });   // 按住後：手指移動不捲動清單
     d.addEventListener('pointerdown', function (e) {
       if (e.button || s) return;
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
       s = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
-      s.pull = !s.touch || !!d.closest('.pg.top');                   // 手機上：清單捲不上去時，往下拉才是拖卡片（不然是捲動）
-      s.pullUp = !s.touch || !!d.closest('.pg.bot');                 // 往上拉同理
+      // 手機上：直接上下滑＝捲動清單；先按住一下（約 0.22 秒，卡片浮起來，還沒到 0.5 秒的震動編輯）再上下拖＝拖卡片
+      s.held = !s.touch; s.far = 0;
+      if (s.touch) s.rt = setTimeout(function () { if (s && !s.mv && s.far < 8) { s.held = true; d.classList.add('ready'); } }, HOLD_MS);   // 手指要幾乎不動才算按住（慢慢滑不算）
       d.classList.add('press');
       s.tm = setTimeout(function () {
         if (!s || s.mv) return;
         s.lg = true;
-        d.classList.remove('press');
+        d.classList.remove('press', 'ready');
         buzz(12);
         openSheet('edit', id);
         d.classList.add('edit');
@@ -461,12 +461,13 @@
       if (s.page) { pageMove(e.clientX); return; }
       s.dx = e.clientX - s.x; s.dy = e.clientY - s.y;
       var dist = Math.sqrt(s.dx * s.dx + s.dy * s.dy);
+      if (dist > s.far) s.far = dist;
       if (!s.mv) {
         if (dist <= (s.lg ? 10 : 12)) return;
         var ax = Math.abs(s.dx), ay = Math.abs(s.dy);
         // 往上／往下拉（偏一點左右也算）＝拖卡片：拖到別的卡片之間＝調整順序，拖到垃圾桶＝刪除
         var down = s.dy > 0 && s.dy >= ax * 0.6, up = s.dy < 0 && -s.dy >= ax * 0.6;
-        if (s.touch && !s.lg && ((down && !s.pull) || (up && !s.pullUp))) { cancel(); return; }   // 手機上清單還能往那邊捲＝捲動清單
+        if ((down || up) && !s.held && !s.lg) { cancel(); return; }  // 沒先按住就上下滑＝捲動清單（交給瀏覽器）
         // 換頁：待辦卡片往左滑＝打開已完成（往右滑才是完成）；已完成卡片往右滑＝回待辦（往左滑才是移回）
         if (!s.lg && !down && !up && ax >= ay && s.dx * dir < 0) {
           clearTimeout(s.tm);
@@ -476,7 +477,7 @@
           return;
         }
         s.mv = true; dragging = true;
-        clearTimeout(s.tm);
+        clearTimeout(s.tm); clearTimeout(s.rt); d.classList.remove('ready');
         if (s.lg) { closeSheet(false, true); d.classList.remove('edit'); }
         d.classList.remove('press');
         d.classList.add('drag');
@@ -495,7 +496,7 @@
     });
     function cancel() {
       if (!s) return;
-      clearTimeout(s.tm);
+      clearTimeout(s.tm); clearTimeout(s.rt); d.classList.remove('ready');
       if (s.page) pageEnd();
       if (s.grp) clearShift(s);
       s = null; dragging = false;
@@ -506,7 +507,7 @@
     }
     function end(cancelled) {
       if (!s) return;
-      clearTimeout(s.tm);
+      clearTimeout(s.tm); clearTimeout(s.rt); d.classList.remove('ready');
       var st = s; s = null;
       if (st.page) { pageEnd(); return; }
       var hot = TR.classList.contains('hot');
@@ -961,6 +962,7 @@
       if (updateReady && document.visibilityState === 'hidden' && !sheet.open) location.reload();
     });
     navigator.serviceWorker.register('sw.js').catch(function () {});
+    ensureCache();
   }
   render({ bottom: true });
   updatePill();

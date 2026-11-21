@@ -70,10 +70,8 @@ svg .fill { fill: currentColor; stroke: none; }
 .cw { margin-bottom: 6px; transition: height .28s var(--ease), margin .28s var(--ease), translate .22s var(--ease); }   /* translate：拖曳排序時讓位 */
 .cd { position: relative; background: var(--card); border-radius: 16px; padding: 11px 13px 11px 19px; touch-action: pan-y;
   translate: 0 0; scale: 1; transition: translate .42s var(--spring), scale .3s var(--spring), opacity .25s var(--ease), box-shadow .25s var(--ease); }
-/* 手機上：清單捲不動的那個方向，手指在卡片上拖＝拖卡片（調整順序、拖去垃圾桶），另一個方向照常捲動 */
-.pg.top .cd { touch-action: pan-down; }
-.pg.bot .cd { touch-action: pan-up; }
-.pg.top.bot .cd { touch-action: none; }
+/* 手機上：在卡片上直接上下滑＝捲動清單；先按住一下（卡片浮起來）再上下拖＝調整順序／拖去垃圾桶 */
+.cd.ready { box-shadow: 0 6px 18px rgba(0, 0, 0, .13); }
 .cd.press { scale: .965; transition: scale .5s cubic-bezier(.3, 0, .25, 1), translate .42s var(--spring); }
 .cd.drag { z-index: 50; transition: scale .22s var(--ease), opacity .22s var(--ease), box-shadow .25s var(--ease); box-shadow: 0 6px 18px rgba(0, 0, 0, .14); }
 .cd.edit { box-shadow: 0 0 0 2px var(--accent); }

@@ -1,21 +1,27 @@
 // App 本體（頁面、程式、樣式、圖示）整包裝在有版本號的快取裡，一律先用快取，開啟不用等網路。
 // 新版只在這個檔案的版本號變了時才整包下載，下載完整才換上，所以頁面和程式一定是同一版，不會半新半舊。
 // 資料不經過這裡（資料存在 localStorage，同步走 Google Apps Script）。
-var CACHE = 'deadline-shell-v14';
-var FILES = ['./', 'index.html', 'app.js?v=14', 'app.css?v=14', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
+var CACHE = 'deadline-shell-v15';
+var FILES = ['./', 'index.html', 'app.js?v=15', 'app.css?v=15', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png'];
 
+function fill(c) { return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); })); }   // 不用瀏覽器裡的舊檔
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) {
-    return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); }));   // 不用瀏覽器裡的舊檔
-  }));
+  e.waitUntil(caches.open(CACHE).then(fill));
   self.skipWaiting();
 });
+// App 打開或回到前景時會請這裡檢查一次：快取被清掉（例如手機空間不夠時）就重新下載這一版，離線也能開
+function ensure() {
+  return caches.open(CACHE).then(function (c) {
+    return c.keys().then(function (ks) { if (ks.length < FILES.length) return fill(c); });
+  }).catch(function () {});
+}
+self.addEventListener('message', function (e) { if (e.data === 'ensure-cache') e.waitUntil(ensure()); });
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
     return Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
-  }).then(function () { return self.clients.claim(); }));
+  }).then(ensure).then(function () { return self.clients.claim(); }));
 });
 
 self.addEventListener('fetch', function (e) {
