@@ -37,7 +37,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 svg .fill { fill: currentColor; stroke: none; }
 
-#app { position: fixed; inset: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+/* overflow: clip＝整個 App 外框不能被捲動：收起來的編輯面板、垃圾桶、已完成頁都藏在畫面外，
+   用 hidden 的話鍵盤彈出時瀏覽器會把外框捲下去「找」輸入框，收起來的面板和垃圾桶就從底部露出來 */
+#app { position: fixed; inset: 0; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .pg { position: absolute; inset: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none; background: var(--bg); transition: translate var(--navd, .32s) var(--nav);
   padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }

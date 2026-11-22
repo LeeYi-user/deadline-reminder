@@ -444,8 +444,8 @@
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
       s = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
       // 手機上：直接上下滑＝捲動清單；按住一下（約 0.1 秒，卡片一壓下去）就可以上下拖＝拖卡片；0.5 秒震動＝編輯
-      s.held = !s.touch; s.far = 0;
-      if (s.touch) s.rt = setTimeout(function () { if (s && !s.mv && s.far < 8) { s.held = true; d.classList.add('press', 'ready'); } }, HOLD_MS);   // 手指幾乎不動才算按住；壓下去的動畫一出現就能拖
+      s.held = !s.touch; s.far = 0; s.t0 = e.timeStamp; s.early = false;
+      if (s.touch) s.rt = setTimeout(function () { if (s && !s.mv && !s.early && s.far < 8) { s.held = true; d.classList.add('press', 'ready'); } }, HOLD_MS);   // 手指幾乎不動才算按住；壓下去的動畫一出現就能拖
       else d.classList.add('press');
       s.tm = setTimeout(function () {
         if (!s || s.mv) return;
@@ -462,6 +462,16 @@
       s.dx = e.clientX - s.x; s.dy = e.clientY - s.y;
       var dist = Math.sqrt(s.dx * s.dx + s.dy * s.dy);
       if (dist > s.far) s.far = dist;
+      // 手指在 0.1 秒內就移動了 8px 以上＝在滑（捲動），不是按住。畫面忙的時候計時器可能比排隊中的手指移動先跑，
+      // 所以用觸控事件本身的時間再確認一次，誤判成按住就撤回（不然快速捲動會變成拖卡片）
+      if (s.touch && !s.mv && !s.lg && !s.early) {
+        var evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || []; if (!evs.length) evs = [e];
+        for (var i = 0; i < evs.length; i++) {
+          var qx = evs[i].clientX - s.x, qy = evs[i].clientY - s.y;
+          if (evs[i].timeStamp - s.t0 < HOLD_MS && qx * qx + qy * qy >= 64) { s.early = true; break; }
+        }
+        if (s.early && s.held) { s.held = false; d.classList.remove('press', 'ready'); }
+      }
       if (!s.mv) {
         if (dist <= (s.lg ? 10 : 12)) return;
         var ax = Math.abs(s.dx), ay = Math.abs(s.dy);
@@ -608,7 +618,11 @@
 
   // ---------- 換頁：待辦頁任何地方往左滑＝已完成；已完成頁任何地方往右滑＝回待辦（手機的返回鍵也會回待辦）----------
   var APP = $('app'), PM = $('pm'), PD = $('pd');
-  var pager = { on: false, opening: false, x0: 0, dx: 0, W: 1, endAt: 0, pts: [], tm: 0 };
+  // 保險：舊瀏覽器不支援 overflow: clip 時，App 外框被捲動（例如鍵盤彈出）就馬上捲回來，收起來的面板和垃圾桶不會露出來
+  function unscrollApp() { if (APP.scrollTop || APP.scrollLeft) { APP.scrollTop = 0; APP.scrollLeft = 0; } }
+  APP.addEventListener('scroll', unscrollApp);
+  if (window.visualViewport) visualViewport.addEventListener('resize', function () { unscrollApp(); setTimeout(unscrollApp, 350); });
+  var pager ={ on: false, opening: false, x0: 0, dx: 0, W: 1, endAt: 0, pts: [], tm: 0 };
   function clamp01(n) { return Math.min(1, Math.max(0, n)); }
   function pageBegin(x, opening, t) {            // x, t＝手指按下的位置和時間（算甩的速度用）
     pager.on = true; pager.opening = opening; pager.x0 = x; pager.dx = 0;
@@ -758,7 +772,7 @@
     validity();
     SH.classList.add('show'); BD.classList.add('show');
     history.pushState({ page: APP.classList.contains('dopen') ? 'done' : 'main', sheet: true }, '');
-    if (mode === 'add') setTimeout(function () { $('ft').focus(); }, 60);
+    if (mode === 'add') setTimeout(function () { $('ft').focus({ preventScroll: true }); }, 60);   // 面板還在滑上來，不要讓瀏覽器捲畫面去找輸入框
   }
   function closeSheet(save, quiet, fromHistory) {
     if (!sheet.open) return;
