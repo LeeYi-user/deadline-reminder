@@ -300,6 +300,63 @@
   var ICON_BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14l-4-4 4-4M5 10h10.5a4 4 0 1 1 0 8H14"/></svg>';
   var ICON_NOTE = '<svg class="ni" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6zM9 9h6M9 13h6M9 17h3"/></svg>';
 
+  // md-begin
+  // 說明用 Markdown 顯示（編輯時還是純文字）：~~刪除線~~、**粗體**、*斜體*、`程式碼`、[文字](網址)、網址自動變連結、
+  // # 標題、- 清單、1. 編號、- [ ] / - [x] 勾選清單、> 引言、--- 分隔線、``` 程式碼區塊。
+  // 一行一行轉換（換行照原本的樣子），先把 < > & 等轉成純文字，所以說明裡不會跑出真的 HTML。
+  // 單一個 ~ 不算刪除線（「3~5 點」不會被劃掉）；英數字中間的 * 和 _ 也不算（3*4、file_name）。
+  function mdNote(src) {
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    function inline(s, noLink) {
+      var keep = [];
+      function put(h) { keep.push(h); return '\u0000' + (keep.length - 1) + '\u0000'; }
+      s = s.replace(/`([^`]+)`/g, function (m, c) { return put('<code>' + c + '</code>'); });
+      if (!noLink) {
+        s = s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:|tel:)[^\s)]+)\)/gi, function (m, t, u) {
+          return put('<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + inline(t, true) + '</a>');
+        });
+        s = s.replace(/\bhttps?:\/\/[^\s<\u0000　-鿿＀-￯]*[^\s<\u0000　-鿿＀-￯.,;:!?)\]'"]/gi, function (u) {
+          var rest = '', k = u.search(/&(quot|#39|lt|gt)\b/);          // 網址後面緊接著引號等符號：符號不算在網址裡
+          if (k >= 0) { rest = u.slice(k); u = u.slice(0, k); }
+          while (/[.,;:!?)\]~*_]$/.test(u)) { rest = u.slice(-1) + rest; u = u.slice(0, -1); }   // 結尾的標點、~~ ** __ 不算網址
+          if (!/^https?:\/\/[^/]/i.test(u)) return u + rest;
+          return put('<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + '</a>') + rest;
+        });
+      }
+      s = s.replace(/~~(?=\S)([^~]*?\S)~~/g, '<del>$1</del>');
+      s = s.replace(/\*\*(?=\S)(.*?\S)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/(^|[^\w])__(?=\S)(.*?\S)__(?!\w)/g, '$1<strong>$2</strong>');
+      s = s.replace(/(^|[^*\w])\*(?=[^\s*])([^*]*?[^\s*])\*(?![*\w])/g, '$1<em>$2</em>');
+      s = s.replace(/(^|[^\w])_(?=[^\s_])([^_]*?[^\s_])_(?!\w)/g, '$1<em>$2</em>');
+      return s.replace(/\u0000(\d+)\u0000/g, function (m, i) { return keep[+i]; });
+    }
+    var lines = esc(String(src || '')).split('\n'), out = '', code = null;
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i], m;
+      if (code !== null) {                                   // 程式碼區塊裡：原樣顯示，直到下一個 ```
+        if (/^\s*```/.test(ln)) { out += '<pre><code>' + code + '</code></pre>'; code = null; }
+        else code += (code ? '\n' : '') + ln;
+        continue;
+      }
+      if (/^\s*```/.test(ln)) { code = ''; continue; }
+      var ind = ln.match(/^ */)[0].length, pad = ind >= 2 ? ' style="padding-left:' + Math.min(Math.floor(ind / 2), 4) * 1.2 + 'em"' : '';
+      if (!ln.trim()) out += '<div class="mgap"></div>';
+      else if ((m = ln.match(/^\s{0,3}(#{1,6})\s+(.*)$/))) out += '<div class="mh mh' + Math.min(m[1].length, 3) + '">' + inline(m[2]) + '</div>';
+      else if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(ln)) out += '<hr>';
+      else if ((m = ln.match(/^\s*&gt;\s?(.*)$/))) out += '<div class="mq">' + inline(m[1]) + '</div>';
+      else if ((m = ln.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/))) {
+        var on = m[1] !== ' ';
+        out += '<div class="ml mt' + (on ? ' on' : '') + '"' + pad + '><span class="mk"><span class="cb"></span></span><span class="mc">' + inline(m[2]) + '</span></div>';
+      }
+      else if ((m = ln.match(/^\s*[-*+]\s+(.*)$/))) out += '<div class="ml"' + pad + '><span class="mk">•</span><span class="mc">' + inline(m[1]) + '</span></div>';
+      else if ((m = ln.match(/^\s*(\d{1,4})[.)]\s+(.*)$/))) out += '<div class="ml"' + pad + '><span class="mk">' + m[1] + '.</span><span class="mc">' + inline(m[2]) + '</span></div>';
+      else out += '<div class="mp">' + inline(ln) + '</div>';
+    }
+    if (code !== null) out += '<pre><code>' + code + '</code></pre>';  // 沒有收尾的 ``` 也照樣顯示
+    return out;
+  }
+  // md-end
+
   function atBottom(sc) { return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 40; }
   function render(opts) {
     opts = opts || {};
@@ -332,7 +389,7 @@
     d.innerHTML = '<span class="ck">' + (kind === 'd' ? ICON_BACK : ICON_CHECK) + '</span><span class="st"></span>' +
       '<div class="l1"><span class="t"></span>' + (it.note ? ICON_NOTE : '') + '<span class="sp"></span></div>' + (it.note ? '<div class="nt"></div>' : '');
     d.querySelector('.t').textContent = it.title;
-    if (it.note) d.querySelector('.nt').textContent = it.note;
+    if (it.note) d.querySelector('.nt').innerHTML = mdNote(it.note);   // mdNote 會先把文字轉義，不會跑出說明裡的 HTML
     var right = kind === 'd' ? el('span', 'dtm', it.doneAt ? md(it.doneAt) + hm(it.doneAt) : '')
       : b.c === 'r' ? el('span', 'h', hoursLeft(it.deadline, now))
       : b.c === 'n' && it.at ? el('span', 'dtm', md(it.at)) : null;
@@ -441,6 +498,7 @@
     d.addEventListener('touchmove', function (e) { if (s && (s.lg || s.mv || s.held)) e.preventDefault(); }, { passive: false });   // 按住後：手指移動不捲動清單
     d.addEventListener('pointerdown', function (e) {
       if (e.button || s) return;
+      if (e.target.closest && e.target.closest('.nt a')) return;     // 點說明裡的連結＝打開連結（不收合卡片、不拖）
       try { d.setPointerCapture(e.pointerId); } catch (x) {}
       s = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, mv: false, lg: false, w: d.offsetWidth, touch: e.pointerType !== 'mouse' };
       // 手機上：直接上下滑＝捲動清單；按住一下（約 0.1 秒，卡片一壓下去）就可以上下拖＝拖卡片；0.5 秒震動＝編輯

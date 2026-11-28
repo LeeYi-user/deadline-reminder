@@ -101,6 +101,28 @@ svg .fill { fill: currentColor; stroke: none; }
 .nt { display: none; border-top: .5px solid var(--line); margin-top: 9px; padding-top: 9px; font-size: 14px; line-height: 1.55;
   white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .cd.open .nt { display: block; }
+/* 說明的 Markdown（app.js 的 mdNote） */
+.nt del { color: var(--text2); text-decoration: line-through 1.5px; }   /* 線跟字同色，手機上看得清楚 */
+.nt strong { font-weight: 600; }
+.nt code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--pill); border-radius: 5px; padding: 1px 5px; }
+.nt pre { margin: 4px 0; padding: 8px 10px; background: var(--pill); border-radius: 8px; overflow-x: auto; white-space: pre; }
+.nt pre code { background: none; padding: 0; border-radius: 0; }
+.nt a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+.nt a:active { opacity: .6; }
+.nt .mh { font-weight: 600; margin: 6px 0 2px; }
+.nt .mh1 { font-size: 17px; } .nt .mh2 { font-size: 15.5px; }
+.nt > :first-child { margin-top: 0; }
+.nt .mq { border-left: 3px solid var(--line2); padding-left: 9px; color: var(--text2); }
+.nt hr { border: 0; border-top: .5px solid var(--line); margin: 8px 0; }
+.nt .ml { display: flex; gap: 7px; }
+.nt .mk { flex: none; min-width: 1em; color: var(--text3); text-align: right; }
+.nt .mc { min-width: 0; flex: 1; }
+.nt .cb { display: inline-block; width: 15px; height: 15px; border: 1.5px solid var(--text3); border-radius: 4px; vertical-align: -2px; }
+.nt .mt.on .cb { background: var(--accent); border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 100%; }
+.nt .mt.on .mc { color: var(--text2); }
+.nt .mgap { height: .55em; }
 
 .cp { position: sticky; bottom: 0; flex: none; display: flex; align-items: center; gap: 8px; width: 100%; max-width: 640px; margin: 4px auto 0;
   background: var(--card); border: .5px solid var(--line2); border-radius: 22px; padding: 6px 6px 6px 15px; color: var(--text3); z-index: 3; cursor: text; }
